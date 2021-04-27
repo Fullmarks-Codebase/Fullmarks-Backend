@@ -13,7 +13,7 @@ const compression = require("compression");
 
 // Compress Http requests
 app.use(compression());
-
+console.log(process.env.PORT);
 /* socket.io */
 const server = require("http").createServer(app);
 const io = require("socket.io")(server);

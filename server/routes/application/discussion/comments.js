@@ -357,6 +357,7 @@ router.put("/update", auth, async (req, res) => {
 
 router.delete("/delete/:id", auth, async (req, res) => {
   try {
+    console.log(req.params.id);
     if (!parseInt(req.params.id)) {
       return res.status(400).send(errorResponse(400, "need commentId"));
     }

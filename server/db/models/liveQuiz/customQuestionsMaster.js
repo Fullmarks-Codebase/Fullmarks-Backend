@@ -2,7 +2,7 @@ module.exports = (sequelize, Sequelize) => {
   const CustomQuestionsMaster = sequelize.define(
     "custom_questions_master",
     {
-      name:{
+      name: {
         type: Sequelize.STRING,
       },
       createdBy: {
@@ -11,8 +11,9 @@ module.exports = (sequelize, Sequelize) => {
     },
     {
       timestamps: true,
+      charset: "utf8mb4",
+      collate: "utf8mb4_unicode_ci",
     }
   );
   return CustomQuestionsMaster;
 };
-  

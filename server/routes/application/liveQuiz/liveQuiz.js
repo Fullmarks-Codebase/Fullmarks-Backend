@@ -102,6 +102,16 @@ router.post("/report", auth, async (req, res) => {
       total_marks: 0,
     };
 
+    /*----------------- already submitted ------------------ */
+    let checkAlreadySubmitted = await db.liveQuizReportMasters.findOne({
+      where: {
+        userId: parseInt(req.user.id),
+        roomId: parseInt(data.roomId),
+      },
+    });
+    if (checkAlreadySubmitted) {
+      return res.send();
+    }
     /*----------------- question exist ------------------ */
 
     let where = {};
@@ -214,13 +224,13 @@ router.post("/leaderboard", auth, async (req, res) => {
           "buddies",
         ],
         group: ["id"],
-        where: {
-          class: req.body.userId
-            ? otheruser
-              ? otheruser.class
-              : req.user.class
-            : req.user.class,
-        },
+        // where: {
+        //   class: req.body.userId
+        //     ? otheruser
+        //       ? otheruser.class
+        //       : req.user.class
+        //     : req.user.class,
+        // },
         include: [
           {
             model: db.liveQuizReportMasters,
@@ -271,10 +281,10 @@ router.post("/leaderboard", auth, async (req, res) => {
           "buddies",
         ],
         group: ["id"],
-        where: { class: req.user.class },
+        // where: { class: req.user.class },
         include: [
           {
-            // group: ["id"],
+            group: ["id"],
             model: db.liveQuizReportMasters,
             as: "reportMaster",
             required: false,
@@ -309,6 +319,7 @@ router.post("/leaderboard", auth, async (req, res) => {
       } else {
         return res.status(400).send(errorResponse(400, "Need Room Number"));
       }
+
       const leaderboard = await LiveReportMaster.findAll({
         include: [
           {
@@ -331,7 +342,6 @@ router.post("/leaderboard", auth, async (req, res) => {
             where: { id: req.body.roomId },
           },
         ],
-        where: { classId: req.user.class },
         attributes: [
           "correct",
           "incorrect",
@@ -364,6 +374,11 @@ router.post("/leaderboard", auth, async (req, res) => {
           }
         );
       }
+      await db.playing.destroy({
+        where: {
+          userId: req.user.id,
+        },
+      });
       return res.status(200).send(successResponse("Success", 200, leaderboard));
     }
     res.status(400).send(errorResponse(400, "Mode Required"));
@@ -397,6 +412,57 @@ router.post("/shareCode", auth, async (req, res) => {
     if (!isNumber(req.body.roomId)) {
       return res.status(400).send(errorResponse(400, "Need Room Id"));
     }
+    let subjectName;
+    let className;
+    const liveQuiz = await db.customerLiveQuiz.findOne({
+      where: {
+        room: req.body.roomId,
+      },
+    });
+    let data;
+    if (liveQuiz)
+      [
+        (data = await db.customerLiveQuizQuestions.findOne({
+          where: {
+            userRoomId: liveQuiz.id,
+          },
+        })),
+      ];
+    if (data) {
+      if ("fixQuestionId" in data && data.fixQuestionId) {
+        let fixQuestionData = await db.questions.findOne({
+          where: {
+            id: data.fixQuestionId,
+          },
+          include: [
+            {
+              model: db.class,
+              as: "class",
+            },
+            {
+              model: db.subjects,
+              as: "subject",
+            },
+          ],
+        });
+        subjectName = fixQuestionData.subject.name;
+        className = fixQuestionData.class.name;
+      }
+      //  else if ("customQuestionId" in data && data.customQuestionId) {
+      //   await db.customQuestions.findOne({
+      //     where: {
+      //       id: data.customQuestionId,
+      //     },
+      //   });
+      // }
+    }
+    // console.log(JSON.stringify(data, null, 2));
+    let bodyForNotification =
+      `Room: ${req.body.roomId}` +
+      (className ? `  Class : ${className}` : "") +
+      (subjectName ? `  \nSubject: ${subjectName}` : "");
+
+    // console.log(bodyForNotification);
     const numbers = req.body.numbers
       .replace(new RegExp('"', "g"), "")
       .replace("[", "")
@@ -418,25 +484,31 @@ router.post("/shareCode", auth, async (req, res) => {
           [Op.in]: numbers,
         },
       },
+
       attributes: ["id", "registrationToken"],
     });
-
+    // console.log(result);
     var payload = {
       notification: {
         title: `${
           req.user.username || req.user.phoneNumber || req.user.email
         } has invited you to play live quiz.`,
-        body: `Room: ${req.body.roomId}`,
+        body: bodyForNotification,
       },
       data: {
         title: `${
           req.user.username || req.user.phoneNumber || req.user.email
         } has invited you to play live quiz.`,
-        body: `Room: ${req.body.roomId}`,
-        room: req.body.roomId,
+        body: bodyForNotification,
+        data: JSON.stringify({
+          room: req.body.roomId,
+          notifyType: "1",
+        }),
       },
     };
-
+    if (subjectName) {
+      payload.notification;
+    }
     let promise = [];
     result.map((i, index) => {
       if (i.registrationToken)
@@ -448,32 +520,37 @@ router.post("/shareCode", auth, async (req, res) => {
         return res.status(200).send(successResponse("Success", 200, result));
       })
       .catch((error) => {
+        console.log(error);
         return res.status(500).send(errorResponse(500, error.toString()));
       });
   } catch (error) {
+    console.log(error);
     res.status(500).send(errorResponse(500, error.toString()));
   }
 });
 
 function sendNotification(token, payload, id, req) {
   return new Promise(async function (resolve, reject) {
+    let { data } = payload;
+    const notification = await NotificationHistory.create({
+      ...payload.notification,
+      userId: id,
+      room: JSON.parse(data.data).room,
+      notifyType: 1,
+    });
+
+    payload.data.data = JSON.stringify({
+      room: req.body.roomId,
+      notifyType: "1",
+      id: `${notification.id}`,
+    });
+
     const admin = req.app.get("admin");
     admin
       .messaging()
       .sendToDevice(token, payload)
       .then(function (response) {
-        NotificationHistory.create({
-          ...payload.notification,
-          userId: id,
-          room: payload.data.room,
-          notifyType: 1,
-        })
-          .then((result) => {
-            resolve(response);
-          })
-          .catch((err) => {
-            reject(err);
-          });
+        resolve(response);
       })
       .catch(function (error) {
         reject(error);

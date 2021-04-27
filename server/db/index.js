@@ -17,7 +17,7 @@ const sequelize = new Sequelize(dbConfig.DB, dbConfig.USER, dbConfig.PASSWORD, {
     acquire: dbConfig.pool.acquire,
     idle: dbConfig.pool.idle,
   },
-  // logging: false,
+  logging: false,
 });
 
 const db = {};
@@ -106,6 +106,10 @@ db.mockReportMaster = require("./models/mockTest/mockReportMaster")(
   Sequelize
 );
 db.mockReport = require("./models/mockTest/mockReport")(sequelize, Sequelize);
+db.updateRecord = require("./models/liveQuiz/updateRecord")(
+  sequelize,
+  Sequelize
+);
 
 /*-----------------Setting Foriegn Keys---------------*/
 
@@ -138,6 +142,11 @@ db.topics.hasMany(db.questions, { foreignKey: "topicId", as: "question" });
 
 //mockquestion
 db.mockQuestions.belongsTo(db.mockMaster, { as: "mock", onDelete: "CASCADE" });
+db.mockQuestions.belongsTo(db.fixSubject, {
+  as: "fix_subject",
+  onDelete: "CASCADE",
+});
+
 db.mockMaster.belongsTo(db.class, { as: "class", onDelete: "CASCADE" });
 db.mockMaster.hasMany(db.mockQuestions, {
   foreignKey: "mockId",
@@ -158,6 +167,12 @@ db.customerLiveQuizQuestions.belongsTo(db.customerLiveQuiz, {
 db.customerLiveQuizQuestions.belongsTo(db.questions, { as: "fix_question" });
 db.customerLiveQuizQuestions.belongsTo(db.customQuestions, {
   as: "custom_question",
+});
+
+//customQustionsMaster
+db.customQuestionsMaster.belongsTo(db.class, {
+  as: "class",
+  onDelete: "CASCADE",
 });
 
 //customQuestions
@@ -421,6 +436,21 @@ db.mockReportMaster.hasMany(db.mockReport, {
 db.mockQuestions.hasMany(db.mockReport, {
   foreignKey: "questionId",
   as: "questions",
+});
+
+db.updateRecord.belongsTo(db.users, { as: "user", onDelete: "CASCADE" });
+db.updateRecord.belongsTo(db.customerLiveQuiz, {
+  as: "room",
+  onDelete: "CASCADE",
+});
+db.updateRecord.belongsTo(db.questions, {
+  as: "question",
+  onDelete: "CASCADE",
+});
+
+db.updateRecord.belongsTo(db.customQuestions, {
+  as: "customQuestion",
+  onDelete: "CASCADE",
 });
 
 // db.users.hasMany(db.mockReport, { foreignKey: "userId", as: "mockReport" });

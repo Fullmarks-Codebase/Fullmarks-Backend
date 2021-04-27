@@ -158,15 +158,26 @@ router.post("/overall", auth, (req, res) => {
     })
       .then((result) => {
         let report = result.dataValues;
+        // if (
+        //   parseInt(result.correct) === 0 &&
+        //   parseInt(result.incorrect) === 0
+        // ) {
+        //   report["accuracy"] = 0;
+        // }else
         report["accuracy"] = (
           (parseInt(result.correct) /
-            (parseInt(result.correct) + parseInt(result.incorrect))) *
+            (parseInt(result.correct) +
+              parseInt(result.incorrect) +
+              parseInt(result.skipped))) *
           100
         ).toFixed(2);
+
         report["avg_time"] = secondsToHms(
           calculateRatio(
             parseInt(result.time_taken),
-            parseInt(result.correct) + parseInt(result.incorrect)
+            parseInt(result.correct) +
+              parseInt(result.incorrect) +
+              parseInt(result.skipped)
           )
         );
         res.status(200).send(successResponse("Success", 200, result));
@@ -218,13 +229,15 @@ router.post("/subject", auth, (req, res) => {
         report.map((i, index) => {
           i["accuracy"] = (
             (parseInt(i.correct) /
-              (parseInt(i.correct) + parseInt(i.incorrect))) *
+              (parseInt(i.correct) +
+                parseInt(i.incorrect) +
+                parseInt(i.skipped))) *
             100
           ).toFixed(2);
           i["avg_time"] = secondsToHms(
             calculateRatio(
               parseInt(i.time_taken),
-              parseInt(i.correct) + parseInt(i.incorrect)
+              parseInt(i.skipped) + parseInt(i.correct) + parseInt(i.incorrect)
             )
           );
         });
@@ -280,13 +293,15 @@ router.post("/set", auth, (req, res) => {
         report.map((i, index) => {
           i.dataValues["accuracy"] = (
             (parseInt(i.correct) /
-              (parseInt(i.correct) + parseInt(i.incorrect))) *
+              (parseInt(i.correct) +
+                parseInt(i.incorrect) +
+                parseInt(i.skipped))) *
             100
           ).toFixed(2);
           i.dataValues["avg_time"] = secondsToHms(
             calculateRatio(
               parseInt(i.time_taken),
-              parseInt(i.correct) + parseInt(i.incorrect)
+              parseInt(i.skipped) + parseInt(i.correct) + parseInt(i.incorrect)
             )
           );
         });

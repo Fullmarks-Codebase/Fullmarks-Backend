@@ -3,8 +3,10 @@ const db = require("../../../db");
 const errorResponse = require("../../../utils/errorResponse");
 const successResponse = require("../../../utils/successResponse");
 const { Op } = require("sequelize");
+const checkAdmin = require("../../../auth/checkAdmin");
 const router = require("express").Router();
 const auth = require("../../../auth/adminAuth");
+
 const modifyImageName = require("../../../utils/modifyImageName");
 const imageCheck = require("../../../utils/imageCheck");
 const {
@@ -162,7 +164,7 @@ router.post("/add", auth, async (req, res) => {
         var imageKeyNames = Object.keys(req.files);
         imageKeyNames.map((i) => {
           const image = req.files[i];
-          questioncontent.map((tag, indexT) => {
+          questioncontent.map((tag, index) => {
             if (
               tag.attributes &&
               tag.attributes.embed &&
@@ -509,6 +511,19 @@ router.post("/mySaved", auth, async (req, res) => {
         return res.status(500).send(errorResponse(500, "need valid subject"));
       }
       where["subjectId"] = req.body.subjectId;
+    } else {
+      const subjectIds = await db.subjects.findAll({
+        where: {
+          classId: parseInt(req.user.class),
+        },
+      });
+
+      let ids = subjectIds.map((i) => {
+        return i.id;
+      });
+      where["subjectId"] = {
+        [Op.in]: ids,
+      };
     }
 
     if (req.body.page) {
@@ -704,7 +719,7 @@ router.post("/removeSave", auth, async (req, res) => {
   }
 });
 
-router.post("/myPost", auth, (req, res) => {
+router.post("/myPost", auth, async (req, res) => {
   try {
     let where = { userId: req.user.id };
     let limit = 10;
@@ -725,6 +740,20 @@ router.post("/myPost", auth, (req, res) => {
           .send(errorResponse(400, "Need Proper Subject Id"));
       }
       where["subjectId"] = req.body.subjectId;
+    } else {
+      const subjectIds = await db.subjects.findAll({
+        where: {
+          classId: parseInt(req.user.class),
+        },
+      });
+
+      let ids = subjectIds.map((i) => {
+        return i.id;
+      });
+      // console.log(ids);
+      where["subjectId"] = {
+        [Op.in]: ids,
+      };
     }
 
     Post.findAll({
@@ -815,5 +844,69 @@ router.post("/deleteImage", auth, async (req, res) => {
     return res.status(500).send(errorResponse(500, error.toString()));
   }
 });
+
+// ADMIN
+
+router.delete("/admin/delete/:id", auth, checkAdmin, async (req, res) => {
+  try {
+    if (!parseInt(req.params.id)) {
+      return res.status(400).send(errorResponse(400, "need Post Id"));
+    }
+    const post = await Post.findOne({ where: { id: req.params.id } });
+
+    if (!post) {
+      return res.status(400).send(errorResponse(400, "Post doesn't exist"));
+    }
+
+    const post_images = await db.postImages.findAll({
+      where: {
+        postId: req.params.id,
+      },
+    });
+
+    const comment_images = await db.commentImages.findAll({
+      where: {
+        postId: req.params.id,
+      },
+    });
+
+    post_images.map(async (i) => {
+      singleImageDelete("post", req, i.image_name);
+    });
+
+    comment_images.map(async (i) => {
+      singleImageDelete("comment", req, i.image_name);
+    });
+
+    await db.postImages.destroy({ where: { postId: req.params.id } });
+    await db.commentImages.destroy({ where: { postId: req.params.id } });
+
+    Post.destroy({ where: { id: req.params.id } })
+      .then(async (result) => {
+        return res.status(200).send(successResponse("Post Deleted", 200));
+      })
+      .catch((err) => {
+        return res.status(400).send(errorResponse(400, err.toString()));
+      });
+  } catch (error) {
+    return res.status(500).send(errorResponse(500, error.toString()));
+  }
+});
+
+async function deleteOldImage(id, name) {
+  return new Promise(async (resolve, reject) => {
+    try {
+      await db.postImages.destroy({
+        where: {
+          postId: id,
+          image_name: name,
+        },
+      });
+      resolve();
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
 
 module.exports = router;

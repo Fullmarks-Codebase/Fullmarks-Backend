@@ -10,7 +10,7 @@ module.exports = (sequelize, Sequelize) => {
         defaultValue: 0,
       },
       room: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.STRING,
       },
       status: {
         type: Sequelize.BOOLEAN,

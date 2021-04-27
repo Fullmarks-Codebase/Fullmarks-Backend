@@ -3,6 +3,12 @@ module.exports = (sequelize, Sequelize) => {
     name: {
       type: Sequelize.STRING,
     },
+    correct_marks: {
+      type: Sequelize.FLOAT(4, 2),
+    },
+    incorrect_marks: {
+      type: Sequelize.FLOAT(4, 2),
+    },
     time: {
       type: Sequelize.INTEGER,
       defaultValue: 9000,

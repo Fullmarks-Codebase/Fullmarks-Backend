@@ -1,22 +1,22 @@
-import React, { Component } from "react";
+import React, { useContext } from "react";
 import { NavLink } from "react-router-dom";
-import { useHistory } from "react-router-dom"
 import Cookies from "js-cookie";
+import globalContext from "../../../context/globalContext";
 
 function UserDropdown(props) {
   const { userDetail } = props;
+  const { user } = useContext(globalContext);
+
   return (
-    <li className="dropdown">
+    <li className='dropdown'>
       <a
-        href="#"
-        data-toggle="dropdown"
-        className="nav-link dropdown-toggle nav-link-lg nav-link-user"
+        href='/#'
+        data-toggle='dropdown'
+        className='nav-link dropdown-toggle nav-link-lg nav-link-user'
       >
-        <div className="d-sm-none d-lg-inline-block">
-          Hi
-        </div>
+        <div className='d-sm-none d-lg-inline-block'>Hi {user?.username}</div>
       </a>
-      <div className="dropdown-menu dropdown-menu-right">
+      <div className='dropdown-menu dropdown-menu-right'>
         {userDetail.datas.map((data, idata) => {
           return (
             <NavLink
@@ -26,20 +26,21 @@ function UserDropdown(props) {
                 color: "#6777ef",
               }}
               exact
-              className="dropdown-item has-icon"
+              className='dropdown-item has-icon'
             >
               <i className={data.icode} /> {data.title}
             </NavLink>
           );
         })}
 
-        <div className="dropdown-divider" />
+        <div className='dropdown-divider' />
         <a
-          className="dropdown-item has-icon text-danger"
+          href='/#'
+          className='dropdown-item has-icon text-danger'
           onClick={() => {
-            localStorage.removeItem('token')
-            Cookies.remove('token')
-            window.location.replace("/")
+            localStorage.removeItem("token");
+            Cookies.remove("token");
+            window.location.replace("/");
           }}
         >
           <i className={userDetail.logoutIcon} /> {userDetail.logoutTitle}
@@ -48,6 +49,5 @@ function UserDropdown(props) {
     </li>
   );
 }
-
 
 export default UserDropdown;

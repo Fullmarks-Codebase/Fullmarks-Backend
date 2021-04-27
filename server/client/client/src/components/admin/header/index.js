@@ -7,18 +7,23 @@ import UserDropdown from "./UserDropdown";
 const Header = () => {
   return (
     <div>
-      <div className="navbar-bg" />
-      <nav className="navbar navbar-expand-lg main-navbar">
-        <form className="form-inline mr-auto">
-          <ul className="navbar-nav mr-3">
+      <div className='navbar-bg' />
+      <nav className='navbar navbar-expand-lg main-navbar'>
+        <form className='form-inline mr-auto'>
+          <ul className='navbar-nav mr-3'>
             <li>
-              <div data-toggle="sidebar" className="nav-link nav-link-lg">
-                <i className="fas fa-bars" />
+              <div
+                data-toggle='sidebar'
+                className='nav-link nav-link-lg pointer'
+              >
+                <a>
+                  <i className='fas fa-bars' />
+                </a>
               </div>
             </li>
           </ul>
         </form>
-        <ul className="navbar-nav navbar-right">
+        <ul className='navbar-nav navbar-right'>
           <UserDropdown userDetail={userDetail} />
         </ul>
       </nav>

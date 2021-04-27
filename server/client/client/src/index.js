@@ -2,11 +2,13 @@ import React from "react";
 import ReactDOM from "react-dom";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
+import "./index.css";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "./assets/css/style.css";
-import { Provider } from "react-redux";
+// import { Provider } from "react-redux";
 import * as serviceWorker from "./serviceWorker";
-import store from "./_redux/store/store";
+import GlobalState from "./context/GlobalState";
+// import store from "./_redux/store/store";
 
 require("popper.js/dist/popper.min");
 require("jquery/dist/jquery.min");
@@ -19,13 +21,15 @@ require("./js/js/scripts");
 require("./js/js/custom");
 
 ReactDOM.render(
-  <Provider store={store}>
-    <BrowserRouter>
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>
-    </BrowserRouter>
-  </Provider>,
+  // <Provider store={store}>
+  <BrowserRouter>
+    <GlobalState>
+      {/* <React.StrictMode> */}
+      <App />
+    </GlobalState>
+    {/* </React.StrictMode> */}
+  </BrowserRouter>,
+  // </Provider>,
   document.getElementById("root")
 );
 serviceWorker.unregister();

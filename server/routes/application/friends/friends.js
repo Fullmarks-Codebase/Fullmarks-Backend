@@ -9,59 +9,64 @@ const Users = db.users;
 
 async function findNumber(i, id) {
   return new Promise(function (resolve, reject) {
-    let temp = {};
-    if (i.phoneNumber) {
-      temp["phoneNumber"] = i.phoneNumber;
-    } else {
-      temp["email"] = i.email;
-    }
+    // let temp = {};
+    // if (i.phoneNumber) {
+    //   temp["phoneNumber"] = i.phoneNumber;
+    // } else {
+    //   temp["email"] = i.email;
+    // }
 
-    Users.findOne({
-      attributes: ["id"],
+    // Users.findOne({
+    //   attributes: ["id"],
+    //   where: {
+    //     admin: {
+    //       [Op.eq]: false,
+    //     },
+    //     id: { [Op.ne]: id },
+    //     ...temp,
+    //   },
+    // })
+    //   .then(async (result) => {
+    //     if (result) {
+    Friend.findOne({
       where: {
-        admin: {
-          [Op.eq]: false,
-        },
-        id: { [Op.ne]: id },
-        ...temp,
+        [Op.or]: [
+          { [Op.and]: [{ fromId: i.id }, { toId: id }] },
+          { [Op.and]: [{ fromId: id }, { toId: i.id }] },
+        ],
+        // [Op.or]: [{ fromId: i.id }, { toId: i.id }],
+        // [Op.or]: [{ status: 0 }, { status: 1 }],
       },
     })
-      .then(async (result) => {
-        if (result) {
-          Friend.findOne({
-            where: {
-              fromId: id,
-              toId: result.id,
-              [Op.or]: [{ status: 0 }, { status: 1 }],
-            },
-          })
-            .then(async (friend) => {
-              if (friend) {
-                resolve(1);
-              } else {
-                const notFriend = await Users.findOne({
-                  where: { id: result.id },
-                  attributes: [
-                    "id",
-                    "username",
-                    "phoneNumber",
-                    "thumbnail",
-                    "userProfileImage",
-                  ],
-                });
-                resolve(notFriend);
-              }
-            })
-            .catch((err) => {
-              reject(err);
-            });
+      .then(async (friend) => {
+        if (friend) {
+          resolve(1);
         } else {
-          resolve(-1);
+          const notFriend = await Users.findOne({
+            where: { id: i.id },
+            attributes: [
+              "id",
+              "username",
+              "phoneNumber",
+              "thumbnail",
+              "userProfileImage",
+              "email",
+            ],
+          });
+          resolve(notFriend);
         }
       })
       .catch((err) => {
         reject(err);
       });
+    //   }
+    //   else {
+    //     resolve(-1);
+    //   }
+    // })
+    // .catch((err) => {
+    //   reject(err);
+    // });
   });
 }
 
@@ -69,7 +74,13 @@ router.post("/notFriend", auth, async (req, res) => {
   try {
     let promise = [];
     const users = await db.users.findAll({
-      where: { id: { [Op.ne]: req.user.id } },
+      where: {
+        id: { [Op.ne]: req.user.id },
+        admin: {
+          [Op.eq]: false,
+        },
+      },
+      order: [["id", "DESC"]],
     });
     users.map((i) => {
       promise.push(findNumber(i, req.user.id));
@@ -241,6 +252,7 @@ async function sendFriendRequest(number, req) {
                 "phoneNumber",
                 "userProfileImage",
                 "thumbnail",
+                "email",
               ],
             },
             {
@@ -253,6 +265,7 @@ async function sendFriendRequest(number, req) {
                 "phoneNumber",
                 "userProfileImage",
                 "thumbnail",
+                "email",
               ],
             },
           ],
@@ -260,19 +273,33 @@ async function sendFriendRequest(number, req) {
 
         var payload = {
           notification: {
-            title: `Friend Request from ${data.from.username}`,
+            title: `Friend Request from ${
+              data.from.username || data.from.phoneNumber || data.from.email
+            }`,
             body: `Accept or Reject`,
           },
           data: {
-            title: `Friend Request from ${data.from.username}`,
+            title: `Friend Request from ${
+              data.from.username || data.from.phoneNumber || data.from.email
+            }`,
             body: `Accept or Reject`,
+            data: JSON.stringify({
+              notifyType: "2",
+            }),
           },
         };
-        await db.notifications.create({
+
+        const notification = await db.notifications.create({
           ...payload.notification,
           userId: user.id,
           notifyType: 2,
         });
+
+        payload.data.data = JSON.stringify({
+          notifyType: "2",
+          id: `${notification.id}`,
+        });
+
         if (user.registrationToken) {
           let response = await admin
             .messaging()
@@ -351,39 +378,69 @@ router.post("/requestResponse", auth, async (req, res) => {
       where: {
         id: req.body.fromId,
       },
-      attributes: ["id", "username"],
+      attributes: [
+        "id",
+        "username",
+        "email",
+        "phoneNumber",
+        "registrationToken",
+      ],
     });
     const toUser = await db.users.findOne({
       where: {
         id: req.body.toId,
       },
-      attributes: ["id", "username"],
+      attributes: [
+        "id",
+        "username",
+        "email",
+        "phoneNumber",
+        "registrationToken",
+      ],
     });
 
     var payload = {
       notification: {
-        title: `Reponse from ${
-          toUser.username || toUser.email || toUser.phoneNumber
+        title: `Response from ${
+          toUser.username || toUser.phoneNumber || toUser.email
         }`,
         body:
           `Your Request has been ` +
           (req.body.status === "1" ? "accepted" : "rejected"),
       },
       data: {
-        title: `Reponse from ${
-          toUser.username || toUser.email || toUser.phoneNumber
+        title: `Response from ${
+          toUser.username || toUser.phoneNumber || toUser.email
         }`,
         body:
           `Your Request has been ` +
           (req.body.status === "1" ? "accepted" : "rejected"),
+        data: JSON.stringify({
+          notifyType: "2",
+        }),
       },
     };
 
-    await db.notifications.create({
+    const notification = await db.notifications.create({
       ...payload.notification,
       userId: fromUser.id,
       notifyType: 2,
     });
+
+    payload.data.data = JSON.stringify({
+      notifyType: "2",
+      id: `${notification.id}`,
+    });
+
+    const admin = req.app.get("admin");
+
+    if (fromUser.registrationToken) {
+      let response = await admin
+        .messaging()
+        .sendToDevice(fromUser.registrationToken, payload);
+      console.log("response");
+      console.log(response);
+    }
 
     Friend.update(
       { status: parseInt(req.body.status) },

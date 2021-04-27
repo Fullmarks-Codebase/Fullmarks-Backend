@@ -63,6 +63,23 @@ router.post("/", auth, checkAdmin, async (req, res) => {
         );
       }
 
+      let fix = [
+        "question",
+        "question_image",
+        "ans_one",
+        "ans_two",
+        "ans_three",
+        "ans_four",
+        "ans_one_image",
+        "ans_two_image",
+        "ans_three_image",
+        "ans_four_image",
+        "difficulty_level",
+        "sub_category_name",
+        "answer",
+        "subject_name",
+        "class_name",
+      ];
       Promise.all(promise)
         .then(async (result) => {
           if (req.files.questions) {
@@ -71,17 +88,28 @@ router.post("/", auth, checkAdmin, async (req, res) => {
                 .status(400)
                 .send(errorResponse(400, "Proper Excel Files Required"));
             }
-            console.log(req.files.questions);
+            // console.log(req.files.questions);
             const { Sheet1 } = excelToJson({
               source: req.files.questions.data,
               columnToKey: {
                 "*": "{{columnHeader}}",
               },
-              header: {
-                rows: 1,
-              },
             });
+
+            const got = Object.keys(Sheet1[0]);
+            const result = fix.concat(got).filter((val) => !got.includes(val));
+
+            if (result.length > 0) {
+              return res
+                .status(400)
+                .send(errorResponse(400, `${result} required in excel file`));
+            }
+            let flag = true;
             for (let row of Sheet1) {
+              if (flag === true) {
+                flag = false;
+                continue;
+              }
               await insertData(row, req.user.id, req);
             }
             return res
@@ -249,6 +277,7 @@ async function insertData(row, id, req) {
             Key: `${process.env.AWS_IMAGE_SUBJECT}/${fixSubject.image}`,
           },
           function (err, data) {
+            conosle.log(err);
             if (err)
               return res.status(500).send(errorResponse(500, err.toString()));
             var params = {
@@ -257,6 +286,7 @@ async function insertData(row, id, req) {
               Body: data.Body,
             };
             s3.upload(params, function (err, data) {
+              conosle.log(err);
               if (err)
                 return res.status(500).send(errorResponse(500, err.toString()));
             });
@@ -331,7 +361,7 @@ async function insertData(row, id, req) {
 
   //set
   const difficulty_level = difficulty_new[row.difficulty_level.toString()];
-  console.log(difficulty_level);
+  // console.log(difficulty_level);
   const ans = temp[row.answer];
   let setExist = await Set.findOne({
     where: { classId: ids.class, topicId: ids.topic, subjectId: ids.subject },
@@ -494,6 +524,7 @@ let mandatory = [
   "mock_name",
   "class",
   "answer",
+  "subject_name",
 ];
 
 router.post("/mock", auth, checkAdmin, async (req, res) => {
@@ -533,6 +564,11 @@ router.post("/mock", auth, checkAdmin, async (req, res) => {
           )
         );
       }
+      let responseToClient;
+      let { classId, mockId, fixSubjectId } = req.body;
+      // console.log(`classId - ${classId} __ mockId - ${mockId}`);
+
+      //
       Promise.all(promise)
         .then(async () => {
           if (req.files.questions) {
@@ -541,7 +577,7 @@ router.post("/mock", auth, checkAdmin, async (req, res) => {
                 .status(400)
                 .send(errorResponse(400, "Proper Excel Files Required"));
             }
-            console.log("Starting to add mock questions");
+            // console.log("Starting to add mock questions");
             const { Sheet1 } = excelToJson({
               source: req.files.questions.data,
               columnToKey: {
@@ -549,6 +585,15 @@ router.post("/mock", auth, checkAdmin, async (req, res) => {
               },
             });
             const got = Object.keys(Sheet1[0]);
+            if (classId) {
+              mandatory = mandatory.filter((m) => !m.includes("class"));
+            }
+            if (mockId) {
+              mandatory = mandatory.filter((m) => !m.includes("mock_name"));
+            }
+            if (fixSubjectId) {
+              mandatory = mandatory.filter((m) => !m.includes("subject_name"));
+            }
             const result = mandatory
               .concat(got)
               .filter((val) => !got.includes(val));
@@ -558,21 +603,28 @@ router.post("/mock", auth, checkAdmin, async (req, res) => {
                 .send(errorResponse(400, `${result} required in excel file`));
             }
             let flag = true;
-            let newdata = [];
             for (let row of Sheet1) {
               if (flag === true) {
                 flag = false;
                 continue;
               }
-              await insertMockQuestion(row, req.user.id, req);
+              responseToClient = await insertMockQuestion(
+                res,
+                row,
+                req.user.id,
+                req,
+                classId,
+                mockId,
+                fixSubjectId
+              );
             }
             return res
               .status(200)
-              .send(successResponse("File/s Uploaded", 200));
+              .send(successResponse("File/s Uploaded", 200, responseToClient));
           } else {
             return res
               .status(200)
-              .send(successResponse("File/s Uploaded", 200));
+              .send(successResponse("File/s Uploaded", 200, responseToClient));
           }
         })
         .catch((err) => {
@@ -586,51 +638,117 @@ router.post("/mock", auth, checkAdmin, async (req, res) => {
   }
 });
 
-async function insertMockQuestion(row, id, req) {
+async function insertMockQuestion(
+  res,
+  row,
+  userId,
+  req,
+  classId,
+  mockId,
+  fixSubjectId
+) {
   try {
     let ids = {
-      mockId: null,
-      classId: null,
+      mockId,
+      classId,
+      fixSubjectId,
     };
-    let classExist = await Class.findOne({
-      where: {
-        name: {
-          [Op.like]: row.class,
+
+    let mockExist;
+    let classExist;
+    let subjectExist;
+
+    // Class
+    if (classId) {
+      classExist = await Class.findOne({
+        where: {
+          id: classId,
         },
-      },
-    });
+      });
+    } else {
+      classExist = await Class.findOne({
+        where: {
+          name: {
+            [Op.like]: row.class,
+          },
+        },
+      });
+    }
+
     if (!classExist) {
-      classExist = await Class.create({
-        name: row.class,
-        createdBy: 6,
-        updatedBy: 6,
-        class_image:
-          row.class_image && row.class_image.length > 0
-            ? row.class_image
-            : null,
-      });
+      // if(row.class && row.class.length > 2){
+      //   classExist = await Class.create({
+      //     name: row.class,
+      //     createdBy: 6,
+      //     updatedBy: 6,
+      //     class_image:
+      //       row.class_image && row.class_image.length > 0
+      //         ? row.class_image
+      //         : null,
+      //   })
+      // } else {
+      // }
     }
-    ids.class = classExist.id;
+    ids.classId = classExist.id;
 
-    let mockExist = await db.mockMaster.findOne({
-      where: {
-        name: {
-          [Op.like]: row.mock_name,
+    // MOCK
+    if (mockId) {
+      mockExist = await db.mockMaster.findOne({
+        where: {
+          id: mockId,
         },
-      },
-    });
-
-    if (!mockExist) {
-      let time = {};
-      if (row.time) {
-        time["time"] = parseInt(row.time);
+      });
+    } else {
+      mockExist = await db.mockMaster.findOne({
+        where: {
+          name: {
+            [Op.like]: row.mock_name,
+          },
+        },
+      });
+      if (!mockExist) {
+        let time = {};
+        if (row.time) {
+          time["time"] = parseInt(row.time);
+        }
+        if (row.mock_name && row.mock_name.length > 2) {
+          mockExist = await db.mockMaster.create({
+            name: row.mock_name,
+            ...time,
+            classId: ids.classId,
+          });
+        } else {
+          throw new Error(
+            "Select a Mock OR in the excel-file mock_name must be greater than 2 characters"
+          );
+        }
       }
-      mockExist = await db.mockMaster.create({
-        name: row.mock_name,
-        ...time,
-        classId: ids.class,
+    }
+
+    ids.mockId = mockExist.id;
+
+    // SUBJECT
+
+    if (fixSubjectId) {
+      subjectExist = await db.fixSubject.findOne({
+        where: {
+          id: fixSubjectId,
+        },
+      });
+    } else {
+      subjectExist = await db.fixSubject.findOne({
+        where: {
+          name: {
+            [Op.like]: row.subject_name,
+          },
+        },
       });
     }
+    if (!subjectExist) {
+      throw new Error("Subject Does not exist");
+    }
+    ids.fixSubjectId = subjectExist.id;
+
     ids.mockId = mockExist.id;
     const ans = temp[row.answer];
     let question = await db.mockQuestions.create({
@@ -660,13 +778,16 @@ async function insertMockQuestion(row, id, req) {
         row.question_image && row.question_image.length > 0
           ? row.question_image
           : null,
-      createdBy: id,
-      updatedBy: id,
-      classId: ids.class,
+      createdBy: userId,
+      updatedBy: userId,
+      classId: ids.classId,
       mockId: ids.mockId,
+      fixSubjectId: ids.fixSubjectId,
     });
+    return question;
   } catch (err) {
     console.log(err);
+    throw new Error(err);
   }
 }
 

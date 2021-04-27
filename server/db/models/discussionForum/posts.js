@@ -1,4 +1,3 @@
-const moment = require("moment");
 module.exports = (sequelize, Sequelize) => {
   const Posts = sequelize.define(
     "posts",
@@ -20,6 +19,10 @@ module.exports = (sequelize, Sequelize) => {
     },
     {
       timestamps: true,
+      // charset: "utf8",
+      // collate: "utf8_unicode_ci",
+      charset: "utf8mb4",
+      collate: "utf8mb4_unicode_ci",
     }
   );
   return Posts;

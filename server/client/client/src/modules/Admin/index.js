@@ -29,6 +29,10 @@ import AddClass from "./ClassHandle/Components/AddClass";
 import UpdateClass from "./ClassHandle/Components/UpdateClass";
 
 import SetTable from "./SetHandle/Components/SetTable";
+import ImageUploader from "./ImageUploaderHandle/Components/ImageUploader";
+import DiscussionForum from "./DiscussionForumHandle/Components/DiscussionForum";
+import { useContext } from "react";
+import globalContext from "../../context/globalContext";
 
 export const adminHandle = [
   {
@@ -158,6 +162,19 @@ export const SetHandle = [
   },
 ];
 
+export const ImageUploaderHandle = [
+  {
+    path: "/ImageUploader",
+    component: ImageUploader,
+  },
+];
+export const DiscussionForumHandle = [
+  {
+    path: "/DiscussionForum",
+    component: DiscussionForum,
+  },
+];
+
 export const allPath = [
   "Topic",
   "UpdateAdmin",
@@ -195,4 +212,7 @@ export const allPath = [
   "auth/NewPassword/:token",
   "auth/forget-password",
   "",
+  "MathInput",
+  "ImageUploader",
+  "DiscussionForum",
 ];

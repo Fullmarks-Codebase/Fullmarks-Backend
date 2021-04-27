@@ -76,8 +76,7 @@ router.post("/add", authAdmin, checkAdmin, async (req, res) => {
       (Object.keys(req.body).length === 0 && req.body.constructor === Object) ||
       !req.body.topicId ||
       !req.body.setId ||
-      !req.body.classId ||
-      !req.body.question
+      !req.body.classId
     ) {
       return res
         .status(400)
@@ -217,8 +216,7 @@ router.put("/updateQuestion", authAdmin, checkAdmin, async (req, res) => {
   try {
     if (
       (Object.keys(req.body).length === 0 && req.body.constructor === Object) ||
-      !req.body.id ||
-      !req.body.question
+      !req.body.id
     ) {
       return res.status(400).send(errorResponse(400, "need atleast question"));
     }
@@ -271,12 +269,38 @@ router.put("/updateQuestion", authAdmin, checkAdmin, async (req, res) => {
         }
       }
     }
+
     question.updatedBy = req.user.id;
-    question.question = req.body.question || question.question;
-    question.ans_one = req.body.ans_one || question.ans_one;
-    question.ans_two = req.body.ans_two || question.ans_two;
-    question.ans_three = req.body.ans_three || question.ans_three;
-    question.ans_four = req.body.ans_four || question.ans_four;
+    question.question =
+      req.body.question !== "null" || null
+        ? req.body.question
+        : req.body.question.length === 0
+        ? ""
+        : question.ans_one || question.ans_one;
+    question.ans_one =
+      req.body.ans_one !== "null" || null
+        ? req.body.ans_one
+        : req.body.ans_one.length === 0
+        ? ""
+        : question.ans_one || question.ans_one;
+    question.ans_two =
+      req.body.ans_two !== "null" || null
+        ? req.body.ans_two
+        : req.body.ans_two.length === 0
+        ? ""
+        : question.ans_two || question.ans_two;
+    question.ans_three =
+      req.body.ans_three !== "null" || null
+        ? req.body.ans_three
+        : req.body.ans_three.length === 0
+        ? ""
+        : question.ans_three || question.ans_three;
+    question.ans_four =
+      req.body.ans_four !== "null" || null
+        ? req.body.ans_four
+        : req.body.ans_four.length === 0
+        ? ""
+        : question.ans_four || question.ans_four;
     question.question_image =
       fileNames.question_image || question.question_image;
     question.ans_one_image = fileNames.ans_one_image || question.ans_one_image;

@@ -22,7 +22,7 @@ const {
 router.post("/getNames", auth, (req, res) => {
   try {
     CustomQuestionsMaster.findAll({
-      where: { userId: req.user.id },
+      where: { userId: req.user.id, classId: req.user.class },
       include: [
         {
           model: db.customQuestions,
@@ -30,19 +30,35 @@ router.post("/getNames", auth, (req, res) => {
           attributes: [],
           required: false,
         },
+        {
+          model: db.liveQuizReportMasters,
+          as: "customMaster",
+          required: false,
+          attributes: [],
+        },
       ],
       attributes: {
         include: [
           [
-            db.sequelize.fn("COUNT", db.sequelize.col("questions.id")),
-            "total_question",
+            db.sequelize.literal(" IF(count(customMaster.id) > 0, 1, 0)"),
+            "submitted",
           ],
         ],
       },
-      order: [["id", "DESC"]],
+      // order: [["id", "DESC"]],
       group: ["id"],
     })
-      .then((result) => {
+      .then(async (result) => {
+        for (let set of result) {
+          let questionCount = await db.customQuestions.count({
+            where: { customMasterId: set.id },
+          });
+          try {
+            set.dataValues["total_question"] = questionCount || 0;
+          } catch (err) {
+            set["total_question"] = questionCount || 0;
+          }
+        }
         res.status(200).send(successResponse("Success", 200, result));
       })
       .catch((error) => {
@@ -63,15 +79,21 @@ router.post("/add", auth, async (req, res) => {
 
     const name = req.body.name.trim();
     const validation = await CustomQuestionsMaster.findOne({
-      where: { name: { [Op.like]: name } },
+      where: {
+        name: { [Op.like]: name },
+        userId: req.user.id,
+        classId: req.user.class || 4,
+      },
     });
     if (validation) {
       return res.status(500).send(errorResponse(500, "Name Already Exist"));
     }
+
     CustomQuestionsMaster.create({
       name: name.trim(),
       createdBy: req.user.id,
       userId: req.user.id,
+      classId: req.user.class,
     })
       .then((result) => {
         res.status(200).send(successResponse("Success", 200, result));
@@ -156,7 +178,7 @@ router.post("/getQuestions", auth, (req, res) => {
 });
 
 const mandatory = [
-  "time",
+  // "time",
   "customMasterId",
   "ans_one_status",
   "ans_two_status",
@@ -178,70 +200,20 @@ router.post("/questions/add", auth, async (req, res) => {
     }
 
     const { ans_one, ans_two, ans_three, ans_four, question } = req.body;
-    console.log(req.body);
 
-    if (!question) {
-      if (!req.files)
-        return res.status(400).send(errorResponse(400, "Need questions"));
-      else {
-        if (!req.files.question_image) {
-          return res
-            .status(400)
-            .send(errorResponse(400, "Need questions image"));
-        }
-      }
-    }
-    if (!ans_one) {
-      if (!req.files)
-        return res.status(400).send(errorResponse(400, "Need ans_one"));
-      else {
-        if (!req.files.ans_one_image) {
-          return res
-            .status(400)
-            .send(errorResponse(400, "Need answer one image"));
-        }
-      }
-    }
-    if (!ans_two) {
-      if (!req.files)
-        return res.status(400).send(errorResponse(400, "Need ans_two"));
-      else {
-        if (!req.files.ans_two_image) {
-          return res
-            .status(400)
-            .send(errorResponse(400, "Need answer two image"));
-        }
-      }
-    }
-    if (!ans_three) {
-      if (!req.files)
-        return res.status(400).send(errorResponse(400, "Need ans_three"));
-      else {
-        if (!req.files.ans_three_image) {
-          return res
-            .status(400)
-            .send(errorResponse(400, "Need answer three image"));
-        }
-      }
-    }
-    if (!ans_four) {
-      if (!req.files)
-        return res.status(400).send(errorResponse(400, "Need ans_four"));
-      else {
-        if (!req.files.ans_four_image) {
-          return res
-            .status(400)
-            .send(errorResponse(400, "Need answer four image"));
-        }
-      }
-    }
+    const questionContent = JSON.parse(question);
+    const ansOneContent = JSON.parse(ans_one);
+    const ansTwoContent = JSON.parse(ans_two);
+    const ansThreeContent = JSON.parse(ans_three);
+    const ansFourContent = JSON.parse(ans_four);
 
-    const set = await CustomQuestionsMaster.findOne({
-      where: { id: req.body.customMasterId },
-    });
-    if (!set) {
-      return res.status(400).send(errorResponse(400, "Set doesnt exist"));
-    }
+    let contents = [
+      ansOneContent,
+      ansTwoContent,
+      ansThreeContent,
+      ansFourContent,
+      questionContent,
+    ];
 
     let imageName = [
       "ans_one_image",
@@ -258,37 +230,47 @@ router.post("/questions/add", auth, async (req, res) => {
       ans_four_image: null,
       question_image: null,
     };
-
-    for (let i = 0; i < 5; i++) {
-      if (req.files) {
-        const myFile = req.files[imageName[i]];
-        if (myFile && imageName[i] === "question_image") {
-          const modifiedFileName = covertImageName(myFile.name);
-          fileNames[imageName[i]] = modifiedFileName;
-          myFile.mv(
-            `${process.env.custom_question}/${modifiedFileName}`,
-            function (err) {
-              if (err) {
-                console.log(err);
-                return res.status(500).send(errorResponse(500, err.toString()));
+    if (req.files) {
+      if (Object.keys(req.files).length > 0) {
+        var imageKeyNames = Object.keys(req.files);
+        contents.map((content, index) => {
+          imageKeyNames.map((i) => {
+            const image = req.files[i];
+            content.map((tag) => {
+              if (
+                tag.attributes &&
+                tag.attributes.embed &&
+                tag.attributes.embed.source &&
+                tag.attributes.embed.type === "image" &&
+                tag.attributes.embed.source.split("/").pop() === image.name
+              ) {
+                if (index === 4) {
+                  const result = singleImageAdd(image, "custom_question", req);
+                  if (result.status === 0) {
+                    return res.status(500).send(errorResponse(500, result.err));
+                  }
+                  tag.attributes.embed.source = `${result.name}`;
+                  fileNames[imageName[index]] = result.name;
+                } else {
+                  const result = singleImageAdd(image, "custom_answers", req);
+                  if (result.status === 0) {
+                    return res.status(500).send(errorResponse(500, result.err));
+                  }
+                  tag.attributes.embed.source = `${result.name}`;
+                  fileNames[imageName[index]] = result.name;
+                }
               }
-            }
-          );
-          continue;
-        } else if (myFile) {
-          const modifiedFileName = covertImageName(myFile.name);
-          fileNames[imageName[i]] = modifiedFileName;
-          myFile.mv(
-            `${process.env.custom_answers}/${modifiedFileName}`,
-            function (err) {
-              if (err) {
-                console.log(err);
-                return res.status(500).send(errorResponse(500, err.toString()));
-              }
-            }
-          );
-        }
+            });
+          });
+        });
       }
+    }
+
+    const set = await CustomQuestionsMaster.findOne({
+      where: { id: req.body.customMasterId },
+    });
+    if (!set) {
+      return res.status(400).send(errorResponse(400, "Set doesnt exist"));
     }
 
     CustomQuestions.create({
@@ -296,11 +278,11 @@ router.post("/questions/add", auth, async (req, res) => {
       userId: req.user.id,
       createdBy: req.user.id,
       updatedBy: req.user.id,
-      ans_one_image: fileNames.ans_one_image,
-      ans_two_image: fileNames.ans_two_image,
-      ans_three_image: fileNames.ans_three_image,
-      ans_four_image: fileNames.ans_four_image,
-      question_image: fileNames.question_image,
+      ans_one: JSON.stringify(ansOneContent),
+      ans_two: JSON.stringify(ansTwoContent),
+      ans_three: JSON.stringify(ansThreeContent),
+      ans_four: JSON.stringify(ansFourContent),
+      question: JSON.stringify(questionContent),
     })
       .then((data) => {
         return res
@@ -376,83 +358,147 @@ router.put("/questions/update", auth, async (req, res) => {
       return res.status(400).send(errorResponse(400, "Need QuestionId"));
     }
 
-    const question = await CustomQuestions.findOne({
+    const questiondb = await CustomQuestions.findOne({
       where: { id: req.body.id },
     });
 
-    if (!question) {
+    if (!questiondb) {
       return res.status(400).send(errorResponse(400, "Question not found"));
     }
-    let imageName = [
-      "ans_one_image",
-      "ans_two_image",
-      "ans_three_image",
-      "ans_four_image",
-      "question_image",
-    ];
 
-    let fileNames = {
-      ans_one_image: null,
-      ans_two_image: null,
-      ans_three_image: null,
-      ans_four_image: null,
-      question_image: null,
+    let { ans_one, ans_two, ans_three, ans_four, question } = req.body;
+
+    // Function to delete Images in answers
+    let deleteImageIfExists = (imageNames, content) => {
+      imageNames.map((image) => {
+        content.map((tag) => {
+          if (
+            tag.attributes &&
+            tag.attributes.embed &&
+            tag.attributes.embed.source &&
+            tag.attributes.embed.type === "image" &&
+            tag.attributes.embed.source.split("/").pop() === image
+          ) {
+            singleImageDelete("custom_answers", req, image);
+          }
+        });
+      });
     };
 
-    for (let i = 0; i < 5; i++) {
-      if (req.files) {
-        const myFile = req.files[imageName[i]];
-        if (myFile && imageName[i] === "question_image") {
-          if (question["question_image"]) {
-            const oldImage = `./${process.env.custom_question}/${question["question_image"]}`;
-            if (fs.existsSync(oldImage)) {
-              fs.unlinkSync(oldImage);
+    // Check to delete images
+    if (req.body.deleteImages) {
+      const imageNames = req.body.deleteImages
+        .replace(new RegExp('"', "g"), "")
+        .replace("[", "")
+        .replace("]", "")
+        .split(",");
+
+      if (ans_one) {
+        let ansOneContent = JSON.parse(ans_one);
+        deleteImageIfExists(imageNames, ansOneContent);
+      }
+      if (ans_two) {
+        let ansTwoContent = JSON.parse(ans_two);
+        deleteImageIfExists(imageNames, ansTwoContent);
+      }
+      if (ans_three) {
+        let ansThreeContent = JSON.parse(ans_three);
+        deleteImageIfExists(imageNames, ansThreeContent);
+      }
+      if (ans_four) {
+        let ansFourContent = JSON.parse(ans_four);
+        deleteImageIfExists(imageNames, ansFourContent);
+      }
+      if (question) {
+        let questionContent = JSON.parse(question);
+        imageNames.map((image) => {
+          questionContent.map((tag) => {
+            if (
+              tag.attributes &&
+              tag.attributes.embed &&
+              tag.attributes.embed.source &&
+              tag.attributes.embed.type === "image" &&
+              tag.attributes.embed.source.split("/").pop() === image
+            ) {
+              singleImageDelete("custom_question", req, image);
             }
+          });
+        });
+      }
+    }
+
+    // Add image if exists
+
+    const addImageIfExistsAnswers = (image, content) => {
+      content.map((tag) => {
+        if (
+          tag.attributes &&
+          tag.attributes.embed &&
+          tag.attributes.embed.source &&
+          tag.attributes.embed.type === "image" &&
+          tag.attributes.embed.source.split("/").pop() === image.name
+        ) {
+          const result = singleImageAdd(image, "custom_answers", req);
+          if (result.status === 0) {
+            return res.status(500).send(errorResponse(500, result.err));
           }
-          const modifiedFileName = covertImageName(myFile.name);
-          fileNames[imageName[i]] = modifiedFileName;
-          myFile.mv(
-            `./${process.env.custom_question}/${modifiedFileName}`,
-            function (err) {
-              if (err) {
-                console.log(err);
-                return res.status(500).send(errorResponse(500, err.toString()));
-              }
-            }
-          );
-        } else if (myFile) {
-          if (question[imageName[i]]) {
-            const oldImage = `./${process.env.custom_answers}/${
-              question[imageName[i]]
-            }`;
-            if (fs.existsSync(oldImage)) {
-              fs.unlinkSync(oldImage);
-            }
-          }
-          const modifiedFileName = covertImageName(myFile.name);
-          fileNames[imageName[i]] = modifiedFileName;
-          myFile.mv(
-            `./${process.env.custom_answers}/${modifiedFileName}`,
-            function (err) {
-              if (err) {
-                console.log(err);
-                return res.status(500).send(errorResponse(500, err.toString()));
-              }
-            }
-          );
+          tag.attributes.embed.source = `${result.name}`;
         }
+      });
+    };
+
+    if (req.files) {
+      if (Object.keys(req.files).length > 0) {
+        var imageKeyNames = Object.keys(req.files);
+        imageKeyNames.map((i) => {
+          const image = req.files[i];
+          if (ans_one) {
+            let ansOneContent = JSON.parse(ans_one);
+            addImageIfExistsAnswers(image, ansOneContent);
+          }
+          if (ans_two) {
+            let ansTwoContent = JSON.parse(ans_two);
+            addImageIfExistsAnswers(image, ansTwoContent);
+          }
+          if (ans_three) {
+            let ansThreeContent = JSON.parse(ans_three);
+            addImageIfExistsAnswers(image, ansThreeContent);
+          }
+          if (ans_four) {
+            let ansFourContent = JSON.parse(ans_four);
+            addImageIfExistsAnswers(image, ansFourContent);
+          }
+          if (question) {
+            let questionContent = JSON.parse(question);
+            questionContent.map((tag) => {
+              if (
+                tag.attributes &&
+                tag.attributes.embed &&
+                tag.attributes.embed.source &&
+                tag.attributes.embed.type === "image" &&
+                tag.attributes.embed.source.split("/").pop() === image.name
+              ) {
+                const result = singleImageAdd(image, "custom_answers", req);
+                if (result.status === 0) {
+                  return res.status(500).send(errorResponse(500, result.err));
+                }
+                tag.attributes.embed.source = `${result.name}`;
+              }
+            });
+          }
+        });
       }
     }
 
     CustomQuestions.update(
       {
         ...req.body,
-        ans_one_image: fileNames.ans_one_image || question["ans_one_image"],
-        ans_two_image: fileNames.ans_two_image || question["ans_two_image"],
-        ans_three_image:
-          fileNames.ans_three_image || question["ans_three_image"],
-        ans_four_image: fileNames.ans_four_image || question["ans_four_image"],
-        question_image: fileNames.question_image || question["question_image"],
+
+        ans_one: ans_one || questiondb["ans_one"],
+        ans_two: ans_two || questiondb["ans_two"],
+        ans_three: ans_three || questiondb["ans_three"],
+        ans_four: ans_four || questiondb["ans_four"],
+        question: question || questiondb["question"],
       },
       {
         where: {

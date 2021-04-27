@@ -6,7 +6,6 @@ const successResponse = require("../../utils/successResponse");
 const auth = require("../../auth/adminAuth");
 const checkAdmin = require("../../auth/checkAdmin");
 const NotificationHistory = db.notifications;
-const moment = require("moment");
 
 router.post("/", auth, checkAdmin, async (req, res) => {
   try {

@@ -3,21 +3,22 @@
     <head>
         <script src='/socket.io/socket.io.js'></script>
         <script>
-            var socket = io.connect("http://localhost:3001",{
-                // autoConnect:true,
-                // reconnection: true,
-                // reconnectionDelay: 2000,
-                // reconnectionDelayMax : 5000,
-                // reconnectionAttempts: 10,
-                // forceNew:false,
-            });
-            
+            // var socket = io.connect("http://localhost:3001",{
+            //     autoConnect:true,
+            //     reconnection: true,
+            //     reconnectionDelay: 2000,
+            //     reconnectionDelayMax : 5000,
+            //     reconnectionAttempts: 10,
+            //     forceNew:false,
+            // });
+            // var socket = io("/demo")
+            const socket = io()
+
             socket.on("reconnect", () => {
                 console.log(socket.id);
             });
 
             var randomOne = io("/random")
-            
             function roomNumber(){
                 room = document.getElementById("room").value
                 id = document.getElementById("userId").value
@@ -44,6 +45,7 @@
             randomOne.on('welcome', function(data) {
                 addMessage(data.message);
                 showParticipate(data.participants)
+                console.log(data)
                 console.log(data.questions)
                 console.log(data.room)
             });
@@ -56,6 +58,7 @@
             })
 
             randomOne.on("disconnected",(data)=>{
+                console.log(data)
                 addMessage(data.message);
                 showParticipate(data.participants)
             })
@@ -69,19 +72,26 @@
             socket.on('welcome', function(data) {
                 addMessage(data.message);
                 showParticipate(data.participants)
-                console.log(data.questions)
-                console.log(data.room)
+                console.log(data)
             });
 
-            // setInterval(()=>{
-            //     id = document.getElementById("userId").value
-            //     // socket.emit("updateScore",{point:1,id:id})
-            //     socket.emit("userDetails",{})
-            // },10000)
+            setInterval(()=>{
+
+                // id = document.getElementById("userId").value
+                // randomOne.emit("updateScore",{point:1,id:id,})
+                // socket.emit("userDetails",{})
+            },1000)
 
             socket.on("allParticipants",(data)=>{
-                console.log(data)
+                console.log(data.users)
             })
+            randomOne.on("allParticipants",(data)=>{
+                console.log(data.users)
+            })
+
+            // socket.on("allParticipants",(data)=>{
+            //     console.log(data)
+            // })
 
             socket.on('session_full', function(data) {
                 alert(data.message);
@@ -93,51 +103,48 @@
                 showParticipate(data.participants)
             })
 
+            socket.on("question",(data)=>{
+                console.log(data)
+            })
+
             socket.on('disconnected',(data)=>{
-                addMessage(data.message)
-                showParticipate(data.participants)
+                addMessage(data)
             })
             
             socket.on("GetReady",(data)=>{
                 showParticipate(data.participants)
                 alert(data.message)
             })
-
-            socket.on("participants",(data)=>{
-                showParticipate(data.participants)
-            })
-
+            
             socket.on("Error",(data)=>{
                 alert(data)
             })
 
             function submit(){
-                // id = document.getElementById("subject").value
-                // subjectId = id
-                // id = document.getElementById("userId").value
-                // socket.emit("submit",{
-                //     users:{ id:id, username:"somethin", userProfileImage:"yesyesyes.png",thumbnail:"thumbnail.png"},
-                //     data:{subjectId:subjectId,classId:2}
-                // })         
-                socket.emit('submit',{})       
+                id = document.getElementById("subject").value
+                subjectId=id
+                id = document.getElementById("userId").value
+                room = document.getElementById("room").value
+                randomOne.emit("submit",{
+                    users:{ id:id, username:"somethin", userProfileImage:"yesyesyes.png",thumbnail:"thumbnail.png"},
+                    data:{subjectId:subjectId,classId:2}
+                })     
+                // randomOne.emit("updateScore",{point:1,id:id,room:room})          
             }
 
-            setInterval(()=>{
-                socket.emit("check",{})
-            },3000)
+            function check(){
+                room = document.getElementById("room").value
+                randomOne.emit("check",{
+                    room:room
+                })
+            }
 
             function start_quiz(){
-                id = document.getElementById("userId").value
-                socket.emit("start_quiz",{})     
-                setInterval(()=>{
-                    // console.log("emiting")
-                    // socket.emit("updateScore",{point:1, id:id})
-                },5000)           
+                socket.emit("start_quiz",{})                
             }
             function active(){
                 // socket.emit("active",{})
-                room = document.getElementById("room").value
-                randomOne.emit("active",{room:room})
+                socket.emit("userDetails",{})
             }
             function userDetails(){
                 room = document.getElementById("room").value
@@ -146,9 +153,6 @@
                     console.log(data)
                 })
             }
-            socket.on("question",(data)=>{
-                console.log(data.question)
-            })
 
             socket.on("notSubmitted",(data)=>{
                 addMessage(data.message)
@@ -158,12 +162,20 @@
             })
             
             randomOne.on("notSubmitted",(data)=>{
-                addMessage(data.message)
+                addMessage(data)
             })
-
             randomOne.on("completed",(data)=>{
                 addMessage(data.message)
             })
+
+            function update(){
+                room = document.getElementById("room").value
+                qid = document.getElementById("qid").value
+                id = document.getElementById("userId").value
+                rid = document.getElementById("rid").value
+                socket.emit("updateScore",{point:1,id:id,room:room,questionId:qid,roomId:rid})
+                socket.emit("userDetails",{room:room})
+            }
 
             socket.on('error', ()=>{
                 console.log("called reconnect")
@@ -195,13 +207,17 @@
         <div id="participants">1</div><br/>
         <div id="timer"></div><br/>
         <input id="userId" placeholder="Enter the Id"><br/><br/>
-        <input id="classId" placeholder="Enter the Id"><br/><br/>
+        <input id="classId" placeholder="Enter the class Id"><br/><br/>
         <input id="room" placeholder="Enter Room Number"><br/><br/>
+        <input id="qid" placeholder="Enter Question Id"><br/><br/>
+        <input id="rid" placeholder="Enter Room Id"><br/><br/>
         <button onclick="roomNumber()"> Enter </button>
         <button onclick="start_quiz()">Start quiz </button>
         <button onclick="active()">I Am active </button>
         <button onclick="userDetails()">Details </button>
         <button onclick="submit()">Submit</button>
+        <button onclick="update()">update</button>
+        <button onclick="check()">check</button>
         <br/>
         <br/>
         <br/>

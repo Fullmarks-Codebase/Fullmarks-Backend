@@ -13,7 +13,7 @@ module.exports = (sequelize, Sequelize) => {
         defaultValue: 0,
       },
       room: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.STRING,
       },
       notifyType: {
         type: Sequelize.INTEGER,

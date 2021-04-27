@@ -9,6 +9,9 @@ module.exports = (sequelize, Sequelize) => {
         type: Sequelize.INTEGER,
         defaultValue: 0,
       },
+      timeLimit: {
+        type: Sequelize.INTEGER,
+      },
     },
     {
       timestamps: true,

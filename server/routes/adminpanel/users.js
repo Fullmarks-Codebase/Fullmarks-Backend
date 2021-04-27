@@ -8,8 +8,14 @@ const authAdmin = require("../../auth/adminAuth");
 const checkAdmin = require("../../auth/checkAdmin");
 const { Op } = require("sequelize");
 const successResponse = require("../../utils/successResponse");
+const adminModules = require("../../auth/accessModules");
+const hasAccess = require("../../auth/hasAccess");
+const { users } = require("../../db");
 
-router.post("/", authAdmin, checkAdmin, (req, res) => {
+// To see module ids check auth/accessModules.js
+let moduleId = 1;
+
+router.post("/", authAdmin, checkAdmin, hasAccess(moduleId), (req, res) => {
   try {
     let where = {};
     if (req.body.userId) {
@@ -25,7 +31,14 @@ router.post("/", authAdmin, checkAdmin, (req, res) => {
       };
     }
     User.findAll({
-      attributes: ["id", "username", "email", "createdAt", "updatedAt"],
+      attributes: [
+        "id",
+        "username",
+        "email",
+        "createdAt",
+        "updatedAt",
+        "userAccessModules",
+      ],
       where: where,
     }).then((response) => {
       if (!response[0]) {
@@ -35,10 +48,11 @@ router.post("/", authAdmin, checkAdmin, (req, res) => {
     });
   } catch (err) {
     return res.status(500).send(errorResponse(500, err.toString()));
+    1;
   }
 });
 
-router.post("/add", authAdmin, checkAdmin, (req, res) => {
+router.post("/add", authAdmin, checkAdmin, hasAccess(moduleId), (req, res) => {
   try {
     if (
       (Object.keys(req.body).length === 0 && req.body.constructor === Object) ||
@@ -57,7 +71,14 @@ router.post("/add", authAdmin, checkAdmin, (req, res) => {
     }
 
     const { email, admin = false } = req.body;
-
+    if (admin) {
+      if (!req.body.userAccessModules) {
+        return res
+          .status(400)
+          .send(errorResponse(400, "Need userAccessModules"));
+      }
+    }
+    const userAccessModules = JSON.stringify(req.body.userAccessModules);
     const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
     if (!emailRegexp.test(email)) {
       return res.status(400).send(errorResponse(400, " Need Valid Email"));
@@ -74,6 +95,7 @@ router.post("/add", authAdmin, checkAdmin, (req, res) => {
       User.create({
         ...req.body,
         admin: true,
+        userAccessModules,
       }).then((resp) => {
         if (admin) {
           return res.status(201).send(successResponse("Admin Created"));
@@ -124,6 +146,9 @@ router.post("/login", async (req, res) => {
       admin: user.admin,
       token,
       createdAt: user.createdAt,
+      userAccessModules: user.userAccessModules
+        ? JSON.parse(user.userAccessModules)
+        : null,
     };
 
     res.cookie("token", token);
@@ -131,87 +156,150 @@ router.post("/login", async (req, res) => {
   } catch (err) {
     console.log(err);
     res.status(500).send(errorResponse(500, err.toString()));
+    1;
   }
 });
 
-router.put("/update", authAdmin, checkAdmin, async (req, res) => {
-  try {
-    if (
-      (Object.keys(req.body).length === 0 && req.body.constructor === Object) ||
-      !req.body.email ||
-      !req.body.username ||
-      !req.body.id
-    ) {
-      return res.status(400).send(errorResponse(400, "need id and data"));
+router.put(
+  "/update",
+  authAdmin,
+  checkAdmin,
+  hasAccess(moduleId),
+  async (req, res) => {
+    try {
+      if (
+        (Object.keys(req.body).length === 0 &&
+          req.body.constructor === Object) ||
+        !req.body.email ||
+        !req.body.username ||
+        !req.body.id ||
+        !req.body.userAccessModules
+      ) {
+        return res.status(400).send(errorResponse(400, "need id and data"));
+      }
+
+      const { id, email, username, password } = req.body;
+      const userAccessModules = JSON.stringify(req.body.userAccessModules);
+      const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+      if (!emailRegexp.test(email)) {
+        return res.status(400).send(errorResponse(400, " Need Valid Email"));
+      }
+
+      const user = await User.findOne({
+        where: {
+          id: id,
+        },
+      });
+      if (!user) {
+        return res
+          .status(400)
+          .send(errorResponse(400, "no user found with given id"));
+      }
+
+      user.email = email;
+      user.username = username;
+      user.userAccessModules = userAccessModules;
+      if (password && password.length > 0) {
+        let newHashPassword = await bcrpyt.hash(password, 8);
+        user.password = newHashPassword;
+      }
+      await user.save();
+      return res.status(200).send(successResponse("User Updated !!"));
+    } catch (err) {
+      res.status(500).send(errorResponse(500, err.toString()));
+      1;
     }
+  }
+);
 
-    const { id, email, username, password } = req.body;
-
-    const emailRegexp = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
-    if (!emailRegexp.test(email)) {
-      return res.status(400).send(errorResponse(400, " Need Valid Email"));
+router.delete(
+  "/deleteAdmin/:id",
+  authAdmin,
+  checkAdmin,
+  hasAccess(moduleId),
+  (req, res) => {
+    try {
+      if (!req.params.id) {
+        return res.status(400).send(errorResponse(400, "need id paramater"));
+      }
+      User.destroy({ where: { id: req.params.id } }).then((response) => {
+        res.status(200).send({ rowsAffected: response });
+      });
+    } catch (err) {
+      res.status(500).send(errorResponse(500, err.toString()));
+      1;
     }
+  }
+);
 
-    const user = await User.findOne({
-      where: {
-        id: id,
-      },
-    });
-    if (!user) {
-      return res
-        .status(400)
-        .send(errorResponse(400, "no user found with given id"));
-    }
+router.put(
+  "/changePassword",
+  authAdmin,
+  checkAdmin,
+  hasAccess(moduleId),
+  async (req, res) => {
+    try {
+      if (
+        (Object.keys(req.body).length === 0 &&
+          req.body.constructor === Object) ||
+        !req.body.oldPassword ||
+        !req.body.newPassword
+      ) {
+        return res.status(400).send(errorResponse(400, "Need required data"));
+      }
+      const { oldPassword, newPassword } = req.body;
+      const user = await User.findOne({ where: { id: req.user.id } });
 
-    user.email = email;
-    user.username = username;
-    if (password && password.length > 0) {
-      let newHashPassword = await bcrpyt.hash(password, 8);
+      let decodedPassword = await bcrpyt.compare(
+        oldPassword,
+        req.user.password
+      );
+      // console.log(decodedPassword);
+      if (!decodedPassword) {
+        return res
+          .status(400)
+          .send(errorResponse(400, "Incorrect Old Password"));
+      }
+      let newHashPassword = await bcrpyt.hash(newPassword, 8);
       user.password = newHashPassword;
+      await user.save();
+      res.status(200).send(successResponse("Password Successfully Changed"));
+    } catch (err) {
+      res.status(500).send(errorResponse(500, err.toString()));
+      1;
     }
-    await user.save();
-    return res.status(200).send(successResponse("User Updated !!"));
-  } catch (err) {
-    res.status(500).send(errorResponse(500, err.toString()));
   }
+);
+
+router.get("/userAccessModules", authAdmin, checkAdmin, (req, res) => {
+  res.status(200).json(adminModules);
 });
 
-router.delete("/deleteAdmin/:id", authAdmin, checkAdmin, (req, res) => {
+router.get("/getCurrentUser", async (req, res) => {
   try {
-    if (!req.params.id) {
-      return res.status(400).send(errorResponse(400, "need id paramater"));
+    const token =
+      req.headers["authorization"] || req.headers.cookie.split("=")[1];
+    if (!token) {
+      throw new Error("Please authenticate");
     }
-    User.destroy({ where: { id: req.params.id } }).then((response) => {
-      res.status(200).send({ rowsAffected: response });
+    const { id } = await jwt.verify(token, process.env.JWT_KEY);
+    const user = await users.findOne({
+      where: { id: id },
+      attributes: ["email", "username", "userAccessModules", "admin", "token"],
+    });
+
+    if (user.token !== token) {
+      throw new Error("Token expired or invalid, please re-login");
+    }
+    req.user = user;
+    res.send({
+      ...user.dataValues,
+      userAccessModules: user.userAccessModules
+        ? JSON.parse(user.userAccessModules)
+        : null,
     });
   } catch (err) {
-    res.status(500).send(errorResponse(500, err.toString()));
-  }
-});
-
-router.put("/changePassword", authAdmin, checkAdmin, async (req, res) => {
-  try {
-    if (
-      (Object.keys(req.body).length === 0 && req.body.constructor === Object) ||
-      !req.body.oldPassword ||
-      !req.body.newPassword
-    ) {
-      return res.status(400).send(errorResponse(400, "Need required data"));
-    }
-    const { oldPassword, newPassword } = req.body;
-    const user = await User.findOne({ where: { id: req.user.id } });
-
-    let decodedPassword = await bcrpyt.compare(oldPassword, req.user.password);
-    console.log(decodedPassword);
-    if (!decodedPassword) {
-      return res.status(400).send(errorResponse(400, "Incorrect Old Password"));
-    }
-    let newHashPassword = await bcrpyt.hash(newPassword, 8);
-    user.password = newHashPassword;
-    await user.save();
-    res.status(200).send(successResponse("Password Successfully Changed"));
-  } catch (err) {
-    res.status(500).send(errorResponse(500, err.toString()));
+    return res.status(403).send(errorResponse(403, err.toString()));
   }
 });
 

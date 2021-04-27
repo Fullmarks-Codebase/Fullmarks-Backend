@@ -1,5 +1,4 @@
 import { actionName } from "../actions/user.action";
-import { axiosForAdmin } from "../../axiosconfig";
 
 const initialState = {
   id: "",
@@ -7,7 +6,7 @@ const initialState = {
 };
 
 const getUserFromServer = async () => {
-  let token = localStorage.getItem("token");
+  // let token = localStorage.getItem("token");
   // return await axiosForAdmin.post("/users", { token });
   console.log("qweqwe");
 };

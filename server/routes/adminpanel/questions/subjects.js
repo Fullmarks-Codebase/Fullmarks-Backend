@@ -34,7 +34,6 @@ router.post("/onlySubjects", async (req, res) => {
         return res.status(400).send(errorResponse(400, "Need SubjectId"));
       }
     }
-
     if (req.body.classId) {
       if (req.body.classId) {
         const classes = await Class.findOne({
@@ -359,6 +358,95 @@ router.get("/fixSubject", authAdmin, checkAdmin, (req, res) => {
       });
   } catch (error) {
     res.status(500).send(errorResponse(500, error.toString()));
+  }
+});
+
+// get subjects by mock id
+router.post("/byMockId", authAdmin, checkAdmin, async (req, res) => {
+  let { mockId } = req.body;
+
+  if (mockId) {
+    try {
+      let mock = await db.mockMaster.findOne({
+        where: {
+          id: mockId,
+        },
+      });
+      if (mock) {
+        let subjects = await db.subjects.findAll({
+          where: {
+            classId: mock.classId,
+          },
+        });
+        // console.log(subjects);
+        return res.send(successResponse("success", 200, subjects));
+      } else {
+        res.send(errorResponse(400, "No Mock Found"));
+      }
+    } catch (err) {
+      res.send(errorResponse(500, err.toString()));
+    }
+  }
+});
+
+router.post("/byQuestionId", authAdmin, checkAdmin, async (req, res) => {
+  let { questionId } = req.body;
+
+  if (!questionId) {
+    return res.send(errorResponse(400, "Need questionId"));
+  }
+
+  try {
+    let question = await db.mockQuestions.findOne({
+      where: {
+        id: questionId,
+      },
+    });
+
+    if (!question) {
+      return res.send(errorResponse(400, "no question found with this id"));
+    }
+
+    let mock = await db.mockMaster.findOne({
+      where: {
+        id: question.mockId,
+      },
+    });
+
+    if (!mock) {
+      return res.send(errorResponse(500, "Mock was not found"));
+    }
+
+    let subjects = await db.subjects.findAll({
+      where: {
+        classId: mock.classId,
+      },
+    });
+    if (!subjects) {
+      return res.send(errorResponse(400, "No subjects found"));
+    }
+
+    res.send(successResponse(200, "Subjects Found", subjects));
+  } catch (error) {
+    console.log(error);
+    res.send(errorResponse(500, err.toString()));
+  }
+});
+
+router.post("/byClassId", authAdmin, checkAdmin, async (req, res) => {
+  const { classId } = req.body;
+  if (!classId) {
+    return res.send(errorResponse(400, "classId required"));
+  }
+  try {
+    let subjects = await db.subjects.findAll({
+      where: {
+        classId: classId,
+      },
+    });
+    res.send(successResponse(200, "Success", subjects));
+  } catch (error) {
+    res.send(errorResponse(500, error.toString()));
   }
 });
 

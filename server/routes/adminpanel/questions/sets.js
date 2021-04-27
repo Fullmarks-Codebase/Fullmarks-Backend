@@ -46,7 +46,6 @@ router.post("/", async (req, res) => {
 
     //Set to be shown only if there are 10 questions.. Other if only 6 e.g., don't show the set
     if (req.body.calledFrom === "app") {
-      console.log("====> from app");
       finalQuery.include.push({
         model: db.questions,
         as: "question",
@@ -76,12 +75,9 @@ router.post("/", async (req, res) => {
         return res.status(200).send(successResponse("Success", 200, result));
       })
       .catch((error) => {
-        console.log(error);
-
         return res.status(500).send(errorResponse(500, error.toString()));
       });
   } catch (error) {
-    console.log(error);
     return res.status(500).send(errorResponse(500, error.toString()));
   }
 });

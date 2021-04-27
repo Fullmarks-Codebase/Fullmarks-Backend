@@ -8,6 +8,7 @@ const successResponse = require("../../../utils/successResponse");
 const MockMaster = db.mockMaster;
 const { calculateRatio, secondsToHms } = require("../../../utils/functions");
 const { isNumber } = require("../../../utils/validation");
+const { mockMaster } = require("../../../db");
 
 router.post("/", auth, (req, res) => {
   try {
@@ -56,7 +57,7 @@ router.post("/", auth, (req, res) => {
         return res.status(200).send(successResponse("Success", 200, result));
       })
       .catch((err) => {
-        res.status(500).send(errorResponse(500, err.toString()));
+        res.send(errorResponse(500, err.toString()));
       });
   } catch (error) {
     res.status(500).send(errorResponse(500, error.toString()));
@@ -71,13 +72,17 @@ router.post("/add", auth, checkAdmin, async (req, res) => {
       !isNumber(req.body.time) ||
       !isNumber(req.body.classId)
     ) {
-      return res.status(400).send(errorResponse(400, "Need Name and Time"));
+      return res.send(errorResponse(400, "Need Name and Time"));
     }
 
     if (req.body.name.length < 0) {
-      return res.status(400).send(errorResponse(400, "Need Name"));
+      return res.send(errorResponse(400, "Need Name"));
     }
-
+    if (!req.body.incorrect_marks || !req.body.correct_marks) {
+      return res.send(
+        errorResponse(400, "Neeed incorrectMarks and correctMarks")
+      );
+    }
     const name = req.body.name.trim();
 
     const validation = await MockMaster.findOne({
@@ -85,29 +90,33 @@ router.post("/add", auth, checkAdmin, async (req, res) => {
     });
 
     if (validation) {
-      return res.status(400).send(errorResponse(400, "Name Already Exists"));
+      return res.send(errorResponse(400, "Name Already Exists"));
     }
 
     MockMaster.create({
       name: name,
       time: req.body.time,
+      correct_marks: req.body.correct_marks,
+      incorrect_marks: req.body.incorrect_marks,
       classId: req.body.classId,
     })
       .then((result) => {
         return res.status(201).send(successResponse("Mock Created", 200));
       })
       .catch((err) => {
+        console.log(err);
         throw new Error(err);
       });
   } catch (error) {
-    res.status(500).send(errorResponse(500, error.toString()));
+    console.log(error);
+    res.send(errorResponse(500, error.toString()));
   }
 });
 
 router.delete("/:id", auth, checkAdmin, (req, res) => {
   try {
     if (!req.params.id) {
-      return res.status(400).send(errorResponse(400, "need id"));
+      return res.send(errorResponse(400, "need id"));
     }
     MockMaster.destroy({ where: { id: req.params.id } })
       .then((result) => {
@@ -117,7 +126,7 @@ router.delete("/:id", auth, checkAdmin, (req, res) => {
         throw new Error(err);
       });
   } catch (error) {
-    res.status(500).send(errorResponse(500, error.toString()));
+    res.send(errorResponse(500, error.toString()));
   }
 });
 
@@ -128,10 +137,10 @@ router.put("/update", auth, checkAdmin, async (req, res) => {
       !parseInt(req.body.id) ||
       !req.body.name
     ) {
-      return res.status(400).send(errorResponse(400, "Need Id and name"));
+      return res.send(errorResponse(400, "Need Id and name"));
     }
     if (!req.body.name.trim()) {
-      return res.status(400).send(errorResponse(400, "Need Proper Name"));
+      return res.send(errorResponse(400, "Need Proper Name"));
     }
 
     const mock = await MockMaster.findOne({
@@ -144,15 +153,17 @@ router.put("/update", auth, checkAdmin, async (req, res) => {
       where: { name: { [Op.like]: req.body.name } },
     });
     if (checkIfExist.length > 1) {
-      return res.status(400).send(errorResponse(400, "Already Exist"));
+      return res.send(errorResponse(400, "Already Exist"));
     }
 
     mock.name = req.body.name;
     mock.time = parseInt(req.body.time) || mock.time;
+    mock.incorrect_marks = req.body.incorrect_marks;
+    mock.correct_marks = req.body.correct_marks;
     await mock.save();
     res.status(200).send(successResponse("Mock Updated", 200));
   } catch (error) {
-    res.status(500).send(errorResponse(500, error.toString()));
+    res.send(errorResponse(500, error.toString()));
   }
 });
 
@@ -165,22 +176,22 @@ const mandotory = [
   "correct_answer",
 ];
 
-router.post("/report", auth, (req, res) => {
+router.post("/report", auth, async (req, res) => {
   try {
     if (!req.body.answers) {
-      return res.status(400).send(errorResponse(400, `need answers`));
+      return res.send(errorResponse(400, `need answers`));
     }
     let { answers } = req.body;
 
     if (answers.length < 1) {
-      return res.status(400).send(errorResponse(400, `need answers`));
+      return res.send(errorResponse(400, `need answers`));
     }
     let data;
 
     if (typeof answers === "string") {
       answers = JSON.parse(answers);
       if (answers[0]) data = answers[0];
-      else return res.status(400).send(errorResponse(400, `need answers`));
+      else return res.send(errorResponse(400, `need answers`));
     } else data = answers[0];
 
     let submitReport = {
@@ -192,6 +203,7 @@ router.post("/report", auth, (req, res) => {
       avg_time: 0,
       total_marks: 0,
     };
+
     answers.forEach((answer, index) => {
       var validation = mandotory.filter(function (obj) {
         return Object.keys(answer).indexOf(obj) == -1;
@@ -215,6 +227,7 @@ router.post("/report", auth, (req, res) => {
     submitReport.avg_time = secondsToHms(
       calculateRatio(submitReport.time_taken, answers.length)
     );
+
     submitReport.total_marks = answers.length;
     submitReport.accuracy = (
       (submitReport.correct / answers.length) *
@@ -242,21 +255,21 @@ router.post("/report", auth, (req, res) => {
               .send(successResponse("Submitted", 200, submitReport));
           })
           .catch((err) => {
-            return res.status(500).send(errorResponse(500, err, toString()));
+            return res.send(errorResponse(500, err, toString()));
           });
       })
       .catch((err) => {
-        return res.status(500).send(errorResponse(500, err, toString()));
+        return res.send(errorResponse(500, err, toString()));
       });
   } catch (err) {
-    return res.status(500).send(errorResponse(500, err.toString()));
+    return res.send(errorResponse(500, err.toString()));
   }
 });
 
 router.post("/myReport", auth, (req, res) => {
   try {
     if (!req.body.mockId) {
-      return res.status(400).send(errorResponse(400, "Need MockId"));
+      return res.send(errorResponse(400, "Need MockId"));
     }
 
     db.mockReportMaster
@@ -287,7 +300,7 @@ router.post("/myReport", auth, (req, res) => {
         return res.status(200).send(successResponse("Success", 200, result));
       })
       .catch((err) => {
-        return res.status(500).send(errorResponse(500, err.toString()));
+        return res.send(errorResponse(500, err.toString()));
       });
   } catch (error) {}
 });

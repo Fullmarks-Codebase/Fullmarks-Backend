@@ -61,6 +61,9 @@ module.exports = (sequelize, Sequelize) => {
       isActive: {
         type: Sequelize.BOOLEAN,
       },
+      userAccessModules: {
+        type: Sequelize.STRING,
+      },
     },
     {
       timestamps: true,

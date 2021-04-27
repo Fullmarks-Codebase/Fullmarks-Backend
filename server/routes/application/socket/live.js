@@ -1,5 +1,6 @@
 const { Op } = require("sequelize");
 const db = require("../../../db");
+const Friend = db.friends;
 const CustomerLiveQuiz = db.customerLiveQuiz;
 const Lobby = db.lobby;
 const randomRoom = require("../../../utils/randomOtp");
@@ -19,9 +20,8 @@ function client(socket) {
   };
 }
 
-function sendTime(io, room, participants, question) {
-  io.to(room).emit("question", {
-    question,
+function sendTime(io, room, participants) {
+  io.to(room).emit("GetReady", {
     message: new Date().toJSON(),
     participants,
   });
@@ -58,9 +58,39 @@ module.exports = (io) => {
         }
 
         //check room exist or not
-        const roomExist = await CustomerLiveQuiz.findOne({ where: { room } });
+        const roomExist = await CustomerLiveQuiz.findOne({
+          where: { room },
+          include: [
+            {
+              model: db.users,
+              as: "user",
+              require: false,
+            },
+          ],
+        });
+
         if (!roomExist) {
           io.sockets.in(socket.id).emit("Error", "Room do not exist");
+          return;
+        }
+        if (parseInt(roomExist.started) === parseInt(1)) {
+          io.sockets.in(socket.id).emit("Error", "Quiz already started");
+          return;
+        }
+        if (
+          roomExist.user &&
+          roomExist.user.class &&
+          parseInt(roomExist.user.class) !== parseInt(userObj.class.id)
+        ) {
+          // console.log(userClassDetails);
+          io.sockets
+            .in(socket.id)
+            .emit(
+              "Error",
+              `This Quiz is not elgible for class ${
+                userObj.class.name ? userObj.class.name : ""
+              }`
+            );
           return;
         }
 
@@ -128,11 +158,34 @@ module.exports = (io) => {
                 model: db.questions,
                 as: "fix_question",
                 required: false,
+                include: [
+                  {
+                    model: db.subjects,
+                    as: "subject",
+                  },
+                  {
+                    model: db.class,
+                    as: "class",
+                  },
+                ],
               },
               {
                 model: db.customQuestions,
                 as: "custom_question",
                 required: false,
+                include: [
+                  {
+                    model: db.customQuestionsMaster,
+                    as: "customMaster",
+                    required: false,
+                    include: [
+                      {
+                        model: db.class,
+                        as: "class",
+                      },
+                    ],
+                  },
+                ],
               },
             ],
           });
@@ -144,7 +197,6 @@ module.exports = (io) => {
               roomMasterId: roomExist.id,
             },
           });
-
           if (!checkIfUserRejoin) {
             await db.playing.create({
               roomMasterId: roomExist.id,
@@ -158,7 +210,7 @@ module.exports = (io) => {
             message: "Welcome! " + userObj.username || null,
             participants: io.sockets.adapter.rooms[room].length,
             room: roomExist,
-            question: questions,
+            questions: questions,
           });
 
           socket.on("active", () => {
@@ -229,24 +281,17 @@ module.exports = (io) => {
                   model: db.users,
                   as: "user",
                   required: false,
+                  attributes: {
+                    exclude: ["password"],
+                  },
                 },
               ],
               attributes: ["id", ["points", "score"], "socket_id", "submitted"],
             });
-
             socket.emit("allParticipants", {
               users: allParticipants,
               participants: io.sockets.adapter.rooms[room].length,
             });
-          });
-
-          socket.on("updateScore", async (data) => {
-            await db.playing.update(
-              {
-                points: db.sequelize.literal(`points + ${data.point}`),
-              },
-              { where: { userId: data.id, submitted: false } }
-            );
           });
 
           socket.on("check", async () => {
@@ -277,17 +322,23 @@ module.exports = (io) => {
             });
 
             if (unSubmitted.length > 0) {
-              io.sockets.in(room).emit("notSubmitted", {
-                message: unSubmitted.toString() + "'s answer remain to submit",
-              });
+              io.sockets
+                .in(room)
+                .emit(
+                  "notSubmitted",
+                  unSubmitted.toString() + "'s answer remain to submit"
+                );
             } else {
-              await db.playing.destroy({
-                where: { userId: userObj.id, roomMasterId: roomExist.id },
-              });
               io.sockets.in(room).emit("completed", {
                 message: "Success",
               });
             }
+            await db.playing.destroy({
+              where: { userId: userObj.id, roomMasterId: roomExist.id },
+            });
+            await db.updateRecord.destroy({
+              where: { userId: userObj.id },
+            });
           });
 
           socket.on("submit", async () => {
@@ -322,14 +373,23 @@ module.exports = (io) => {
             });
 
             if (unSubmitted.length > 0) {
-              io.sockets.in(room).emit("notSubmitted", {
-                message: unSubmitted.toString() + "'s answer remain to submit",
-              });
+              io.sockets
+                .in(room)
+                .emit(
+                  "notSubmitted",
+                  unSubmitted.toString() + "'s answer remain to submit"
+                );
             } else {
               io.sockets.in(room).emit("completed", {
                 message: "Success",
               });
             }
+            await db.playing.destroy({
+              where: { userId: userObj.id, roomMasterId: roomExist.id },
+            });
+            await db.updateRecord.destroy({
+              where: { userId: userObj.id },
+            });
           });
 
           socket.on("forceDisconnect", async (data) => {
@@ -345,7 +405,7 @@ module.exports = (io) => {
                   io.sockets.adapter.rooms[room].length) ||
                 0;
 
-            await db.playing.destroy({ where: { socket_id: socket.id } });
+            await db.playing.destroy({ where: { userId: data.userObj.id } });
             io.sockets.in(room).emit("disconnected", {
               message:
                 "User Disconnected: " +
@@ -376,6 +436,46 @@ module.exports = (io) => {
             });
           });
         }
+        //
+        socket.on("updateScore", async (data) => {
+          let where = {};
+          if (data.questionId) where["questionId"] = data.questionId;
+          if (data.customQuestionId)
+            where["customQuestionId"] = data.customQuestionId;
+
+          const checkIfAlreadyUpdate = await db.updateRecord.findOne({
+            where: {
+              userId: data.id,
+              roomId: data.roomId,
+              ...where,
+            },
+          });
+
+          if (!checkIfAlreadyUpdate) {
+            // await db.playing.update(
+            //   {
+            //     points: db.sequelize.literal(`points + 1`),
+            //   },
+            //   {
+            //     where: {
+            //       userId: data.id,
+            //       submitted: false,
+            //       roomMasterId: data.roomId,
+            //     },
+            //   }
+            // );
+            await db.sequelize.query(
+              `Update playings set points = points + 1 where userId=${
+                data.id
+              } and submitted=${0} and roomMasterId=${data.roomId}`
+            );
+            await db.updateRecord.create({
+              userId: data.id,
+              roomId: data.roomId,
+              ...where,
+            });
+          }
+        });
       });
     });
 
@@ -551,11 +651,12 @@ module.exports = (io) => {
         }
 
         socket.on("updateScore", async (data) => {
+          console.log(data);
           await Lobby.update(
             {
-              points: db.sequelize.literal(`points + ${data.points}`),
+              points: db.sequelize.literal(`points + 1`),
             },
-            { where: { userId: data.id, room: roomNumber, completed: 0 } }
+            { where: { userId: data.id, room: data.room, completed: 0 } }
           );
         });
 
@@ -563,6 +664,8 @@ module.exports = (io) => {
           let users = await Lobby.findAll({
             where: {
               room: data.room,
+              completed: 0,
+              status: 1,
             },
             include: [
               {
@@ -579,64 +682,12 @@ module.exports = (io) => {
           });
         });
 
-        socket.on("active", (data) => {
-          console.log(data);
-          clearTimeout(socket.inactivityTimeout);
-          socket.inactivityTimeout = setTimeout(async () => {
-            const leavingUser = await db.users.findOne({
-              where: {
-                id: users.id,
-              },
-            });
-            await Lobby.destroy({
-              where: { userId: leavingUser.id, room: data.room },
-            });
-
-            const online = await Lobby.findAll({
-              where: {
-                room: data.room,
-              },
-            });
-
-            DS.to(data.room).emit("welcome", {
-              message:
-                "User Disconnected: " +
-                (leavingUser ? leavingUser.username : socket.id),
-              participants: online.length,
-            });
-
-            socket.disconnect(true);
-          }, 1000 * 10); // 2 minute
-        });
-
-        socket.on("submit", async () => {
-          const roomInfo = await Lobby.findOne({
-            userId: users.id,
-            subjectId: data.subjectId,
-            classId: data.classId,
-            completed: 0,
-            status: 1,
-          });
-          await Lobby.update(
-            { completed: 1 },
-            {
-              where: {
-                userId: users.id,
-                subjectId: data.subjectId,
-                classId: data.classId,
-                completed: 0,
-                status: 1,
-                room: roomInfo.room,
-              },
-            }
-          );
-          const unSubmitUser = await Lobby.findAll({
+        socket.on("check", async (newData) => {
+          const getAllUser = await Lobby.findAll({
             where: {
-              room: roomInfo.room,
-              classId: data.classId,
+              room: newData.room,
               subjectId: data.subjectId,
-              completed: 0,
-              status: 1,
+              classId: data.classId,
             },
             include: [
               {
@@ -646,25 +697,92 @@ module.exports = (io) => {
                 attributes: ["id", "username", "userProfileImage", "thumbnail"],
               },
             ],
-            attributes: ["id", ["points", "score"], "socket_id", "completed"],
           });
-
-          let unSubmitted = unSubmitUser.map((i) => {
+          let unSubmitted = getAllUser.map((i) => {
             return i.user.username;
           });
-
-          if (unSubmitted.length > 0) {
-            DS.to(roomInfo.room).emit(
+          if (getAllUser.length > 0) {
+            console.log("Incompleted");
+            DS.in(roomInfo.room).emit(
               "notSubmitted",
               unSubmitted.toString() + "'s answer remain to submit"
             );
           } else {
-            DS.to(roomInfo.room).emit("completed", {
+            console.log("Success");
+            DS.in(newData.room).emit("completed", {
               message: "Success",
             });
+            await Lobby.destroy({ where: { socket_id: socket.id } });
+          }
+        });
+
+        socket.on("submit", async () => {
+          const roomInfo = await Lobby.findOne({
+            where: {
+              userId: users.id,
+              subjectId: data.subjectId,
+              classId: data.classId,
+              completed: 0,
+            },
+          });
+          if (roomInfo) {
+            await Lobby.update(
+              { completed: 1 },
+              {
+                where: {
+                  userId: users.id,
+                  subjectId: data.subjectId,
+                  classId: data.classId,
+                  completed: 0,
+                  status: 1,
+                  room: roomInfo.room,
+                },
+              }
+            );
+            const unSubmitUser = await Lobby.findAll({
+              where: {
+                room: roomInfo.room,
+                classId: data.classId,
+                subjectId: data.subjectId,
+                completed: 0,
+                status: 1,
+              },
+
+              include: [
+                {
+                  model: db.users,
+                  as: "user",
+                  required: false,
+                  attributes: [
+                    "id",
+                    "username",
+                    "userProfileImage",
+                    "thumbnail",
+                  ],
+                },
+              ],
+              attributes: ["id", ["points", "score"], "socket_id", "completed"],
+            });
+
+            let unSubmitted = unSubmitUser.map((i) => {
+              return i.user.username;
+            });
+
+            if (unSubmitted.length > 0) {
+              DS.to(roomInfo.room).emit(
+                "notSubmitted",
+                unSubmitted.toString() + "'s answer remain to submit"
+              );
+            } else {
+              DS.to(roomInfo.room).emit("completed", {
+                message: "Success",
+              });
+            }
+            await Lobby.destroy({ where: { socket_id: socket.id } });
           }
         });
       });
+
       socket.on("forceDisconnect", async () => {
         let users = await Lobby.findOne({
           where: {
@@ -680,12 +798,15 @@ module.exports = (io) => {
           ],
         });
         if (users)
-          DS.to(users.room).emit(
-            "disconnected",
-            "User Disconnected: " + users.user.username
-          );
+          DS.to(users.room).emit("disconnected", {
+            message:
+              "User Disconnected: " +
+              (users.user.username || `User${users.user.id}`),
+            users: users,
+          });
         await Lobby.destroy({ where: { socket_id: socket.id } });
       });
+
       socket.on("disconnect", async () => {
         let users = await Lobby.findOne({
           where: {
@@ -701,10 +822,13 @@ module.exports = (io) => {
           ],
         });
         if (users)
-          DS.to(users.room).emit(
-            "disconnected",
-            "User Disconnected: " + users.user.username
-          );
+          DS.to(users.room).emit("disconnected", {
+            // message: "User Disconnected: " + users.user.username,
+            message:
+              "User Disconnected: " +
+              (users.user.username || `User${users.user.id}`),
+            users: users,
+          });
         await Lobby.destroy({ where: { socket_id: socket.id } });
       });
     });

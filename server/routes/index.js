@@ -19,6 +19,7 @@ const reportRouter = require("./adminpanel/questions/report");
 const addQuestionByExcel = require("./adminpanel/questions/addQuestionByExcel");
 const notificationRouter = require("./adminpanel/sendNotification");
 const friendsRouter = require("./application/friends/friends");
+const imageUploader = require("./adminpanel/imageUploader");
 require("./application/activity/activity");
 
 module.exports = (app) => {
@@ -43,4 +44,5 @@ module.exports = (app) => {
   app.use("/addQuestion", addQuestionByExcel);
   app.use("/notification", notificationRouter);
   app.use("/friends", friendsRouter);
+  app.use("/imageUploader", imageUploader);
 };

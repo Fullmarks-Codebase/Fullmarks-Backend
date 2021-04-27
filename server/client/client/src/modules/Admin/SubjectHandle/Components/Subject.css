@@ -1,0 +1,19 @@
+#overflowField {
+  max-width: 150px !important;
+  overflow: auto;
+}
+
+.custom,
+#customArea {
+  width: 200px;
+}
+
+@media (max-width: 768px) {
+  .custom,
+  #customArea {
+    width: 100%;
+  }
+}
+.dropdown-menu {
+  transform: translate3d(15px, 35px, 0px) !important;
+}

@@ -1,0 +1,6 @@
+#!/bin/bash
+cd /home/ubuntu/fullmarks/fullmarks_react/server/client/client
+
+npm install -g pm2
+npm install
+npm run build

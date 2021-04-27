@@ -1,0 +1,5 @@
+#!/bin/bash
+cd /home/ubuntu/fullmarks/fullmarks_react/server/
+
+pm2 delete all
+pm2 start server.js

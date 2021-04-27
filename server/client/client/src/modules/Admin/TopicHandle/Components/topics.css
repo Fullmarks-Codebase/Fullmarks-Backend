@@ -1,0 +1,5 @@
+.overflowField {
+    max-width: 350px !important;
+    overflow: auto;
+    /* height:100px; */
+}

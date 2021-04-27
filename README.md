@@ -1,2 +1,1 @@
-# fullmarks_react
-fullmarks_react
+# FullMarks Backend and Admin panel

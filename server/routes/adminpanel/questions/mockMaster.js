@@ -86,7 +86,7 @@ router.post("/add", auth, checkAdmin, async (req, res) => {
     const name = req.body.name.trim();
 
     const validation = await MockMaster.findOne({
-      where: { name: { [Op.like]: name } },
+      where: { name: { [Op.like]: name }, classId: req.body.classId },
     });
 
     if (validation) {

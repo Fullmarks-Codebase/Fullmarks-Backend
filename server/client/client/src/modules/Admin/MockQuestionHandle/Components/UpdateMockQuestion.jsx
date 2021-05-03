@@ -658,7 +658,7 @@ function UpdateMockQuestion(props) {
                             <label>Is it Correct Answer</label>
                             <select
                               className='form-control'
-                              defaultValue={selected.ans_three_status}
+                              defaultValue={selected.ans_four_status}
                               onClick={(e) =>
                                 setAns_Four_status(e.target.value)
                               }

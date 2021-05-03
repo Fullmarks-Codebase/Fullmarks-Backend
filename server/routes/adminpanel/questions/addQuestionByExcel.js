@@ -277,18 +277,20 @@ async function insertData(row, id, req) {
             Key: `${process.env.AWS_IMAGE_SUBJECT}/${fixSubject.image}`,
           },
           function (err, data) {
-            console.log(err);
-            if (err)
+            if (err) {
+              console.log(err);
               return res.status(500).send(errorResponse(500, err.toString()));
+            }
             var params = {
               Bucket: process.env.AWS_BUCKET_NAME,
               Key: `${process.env.AWS_IMAGE_SUBJECT}/${modifiedFileName}`,
               Body: data.Body,
             };
             s3.upload(params, function (err, data) {
-              console.log(err);
-              if (err)
+              if (err) {
+                console.log(err);
                 return res.status(500).send(errorResponse(500, err.toString()));
+              }
             });
           }
         );

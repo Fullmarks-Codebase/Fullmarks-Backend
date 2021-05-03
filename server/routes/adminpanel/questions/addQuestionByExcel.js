@@ -682,6 +682,7 @@ async function insertMockQuestion(
     }
 
     if (!classExist) {
+      return;
       // return res
       //   .status(400)
       //   .send(errorResponse(400, `Class ${row.class} not found`));

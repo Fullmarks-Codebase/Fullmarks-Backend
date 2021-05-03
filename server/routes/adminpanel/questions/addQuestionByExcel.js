@@ -248,10 +248,15 @@ async function insertData(row, id, req) {
   });
 
   if (!classExist) {
-    return res
-      .status(400)
-      .send(errorResponse(400, `Class ${row.class_name} does not exist.`));
+    // Skip Question
+    return;
 
+    // Throw Error
+    // return res
+    //   .status(400)
+    //   .send(errorResponse(400, `Class ${row.class_name} does not exist.`));
+
+    // Create New Class
     // classExist = await Class.create({
     //   name: row.class_name,
     //   createdBy: id,
@@ -682,10 +687,15 @@ async function insertMockQuestion(
     }
 
     if (!classExist) {
+      // Skip Question
       return;
+
+      // Throw Error
       // return res
       //   .status(400)
       //   .send(errorResponse(400, `Class ${row.class} not found`));
+
+      //Create New class
       // if(row.class && row.class.length > 2){
       //   classExist = await Class.create({
       //     name: row.class,

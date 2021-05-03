@@ -248,13 +248,17 @@ async function insertData(row, id, req) {
   });
 
   if (!classExist) {
-    classExist = await Class.create({
-      name: row.class_name,
-      createdBy: id,
-      updatedBy: id,
-      class_image:
-        row.class_image && row.class_image.length > 0 ? row.class_image : null,
-    });
+    return res
+      .status(400)
+      .send(errorResponse(400, `Class ${row.class_name} does not exist.`));
+
+    // classExist = await Class.create({
+    //   name: row.class_name,
+    //   createdBy: id,
+    //   updatedBy: id,
+    //   class_image:
+    //     row.class_image && row.class_image.length > 0 ? row.class_image : null,
+    // });
   }
   ids.class = classExist.id;
 
@@ -678,6 +682,10 @@ async function insertMockQuestion(
     }
 
     if (!classExist) {
+      return res
+        .status(400)
+        .send(errorResponse(400, `Class ${row.class} not found`));
+
       // if(row.class && row.class.length > 2){
       //   classExist = await Class.create({
       //     name: row.class,

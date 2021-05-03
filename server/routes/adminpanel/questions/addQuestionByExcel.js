@@ -286,7 +286,7 @@ async function insertData(row, id, req) {
               Body: data.Body,
             };
             s3.upload(params, function (err, data) {
-              conosle.log(err);
+              console.log(err);
               if (err)
                 return res.status(500).send(errorResponse(500, err.toString()));
             });

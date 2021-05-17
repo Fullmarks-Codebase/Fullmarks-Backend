@@ -57,6 +57,7 @@ let allowedOrigin = [
   "http://www.e-fullmarks.in/",
   "http://www.e-fullmarks.in",
   "http://52.14.100.205/",
+  "http://52.14.100.205",
   "http://52.14.100.205:3001",
 ];
 app.use(

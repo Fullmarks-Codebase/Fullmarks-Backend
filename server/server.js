@@ -18,7 +18,7 @@ app.use(compression());
 console.log(process.env.PORT);
 /* socket.io */
 const server = require("http").createServer(app);
-const io = require("socket.io")(server, { transports: ["websocket"] });
+const io = require("socket.io")(server, { transports: ["polling"] });
 require("./routes/application/socket/live")(io);
 const demoIo = io.of("/demo");
 require("./routes/application/socket/demo")(demoIo);

@@ -53,11 +53,11 @@ app.use(express.static("client/client/build"));
 /* network */
 let allowedOrigin = [
   process.env.REACT_APP_URL,
-  "http://www.e-fullmarks.in:3001/",
+  "http://www.e-fullmarks.in:3001",
   "http://www.e-fullmarks.in/",
   "http://www.e-fullmarks.in",
   "http://52.14.100.205/",
-  "http://52.14.100.205:3001/",
+  "http://52.14.100.205:3001",
 ];
 app.use(
   cors({
